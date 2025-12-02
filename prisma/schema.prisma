@@ -1,0 +1,145 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  notes         Note[]
+  tags          Tag[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  title       String
+  contentJSON Json
+  contentText String
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags        Tag[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@map("note")
+}
+
+model Tag {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String
+  color       String?
+  description String?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      Tag?      @relation("TagHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Tag[]     @relation("TagHierarchy")
+  isFavorite  Boolean   @default(false)
+  isArchived  Boolean   @default(false)
+  usageCount  Int       @default(0)
+  lastUsed    DateTime  @default(now())
+  deletedAt   DateTime?
+  notes       Note[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  views       TagView[]
+  relatedFrom TagRelation[] @relation("RelatedFrom")
+  relatedTo   TagRelation[] @relation("RelatedTo")
+
+  @@unique([userId, name])
+  @@unique([userId, slug])
+  @@map("tag")
+}
+
+model TagView {
+  id        String   @id @default(cuid())
+  name      String
+  filters   Json
+  tags      Tag[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tag_view")
+}
+
+model TagRelation {
+  id        String   @id @default(cuid())
+  fromId    String
+  toId      String
+  from      Tag      @relation("RelatedFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to        Tag      @relation("RelatedTo", fields: [toId], references: [id], onDelete: Cascade)
+  strength  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fromId, toId])
+  @@map("tag_relation")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@map("verification")
+}

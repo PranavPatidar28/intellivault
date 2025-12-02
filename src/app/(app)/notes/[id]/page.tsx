@@ -1,0 +1,370 @@
+"use client";
+
+import NoteTitle from "@/components/NoteTitle";
+import {
+  SimpleEditorRef,
+  SimpleEditor,
+} from "@/components/tiptap-templates/simple/simple-editor";
+import { Topbar } from "@/components/Topbar";
+import { Button } from "@/components/ui/button";
+import { DeleteDialog } from "@/components/ConfirmationDialog";
+import { useParams, useRouter } from "next/navigation";
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  ArrowLeftIcon,
+  SaveIcon,
+  TrashIcon,
+  CheckCircleIcon,
+  AlertCircleIcon,
+  ClockIcon,
+} from "lucide-react";
+import { Note } from "@/types/note";
+import { NoteEditorSkeleton } from "@/components/skeletons/note-skeleton";
+import { getRelativeTime } from "@/lib/utils/text";
+import { Tag } from "@/components/TagInput";
+import { NoteTags } from "@/components/NoteTags";
+
+export default function NotePage() {
+  const params = useParams();
+  const router = useRouter();
+  const [note, setNote] = useState<Note | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error" | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [lastEditTime, setLastEditTime] = useState<Date | null>(null);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const editorRef = useRef<SimpleEditorRef>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
+
+  const noteId = params.id as string;
+
+  // Fetch note data on component mount
+  useEffect(() => {
+    const fetchNote = async () => {
+      try {
+        const response = await fetch(`/api/notes/${noteId}`);
+        const data = await response.json();
+
+        if (response.ok && data.success && data.note) {
+          const fetchedNote = data.note;
+          setNote(fetchedNote);
+          setNoteTitle(fetchedNote.title);
+          setTags(fetchedNote.tags || []);
+          setLastSaved(new Date(fetchedNote.updatedAt));
+        } else {
+          setErrorMessage("Note not found");
+          setTimeout(() => router.push("/notes"), 2000);
+        }
+      } catch {
+        setErrorMessage("Failed to load note. Please check your connection.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (noteId) {
+      fetchNote();
+    }
+  }, [noteId, router]);
+
+  const handleSaveNote = useCallback(async (isAutoSave: boolean = false) => {
+    if (!editorRef.current || !noteTitle.trim()) {
+      if (!isAutoSave) {
+        setErrorMessage("Title is required");
+        setSaveStatus("error");
+      }
+      return;
+    }
+
+    const title = noteTitle.trim();
+    const contentJSON = editorRef.current.getJSON();
+    const contentText = editorRef.current.getText();
+
+    if (!contentJSON || !contentJSON.content || contentJSON.content.length === 0) {
+      if (!isAutoSave) {
+        setErrorMessage("Content cannot be empty");
+        setSaveStatus("error");
+      }
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveStatus("saving");
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(`/api/notes/${noteId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          contentJSON,
+          contentText,
+          tags: tags.map(t => t.name)
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSaveStatus("saved");
+        setNote(data.note);
+        setLastSaved(new Date());
+        setHasUnsavedChanges(false);
+        setLastEditTime(null);
+
+        // Clear success message after 2 seconds
+        setTimeout(() => {
+          setSaveStatus((current) => current === "saved" ? null : current);
+        }, 2000);
+      } else {
+        setSaveStatus("error");
+        setErrorMessage(data.error || "Failed to update note");
+      }
+    } catch {
+      setSaveStatus("error");
+      setErrorMessage("Network error. Please check your connection.");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [noteId, noteTitle, tags]);
+
+  const handleGoBack = useCallback(() => {
+    if (hasUnsavedChanges) {
+      const confirmLeave = window.confirm(
+        "You have unsaved changes. Are you sure you want to leave?"
+      );
+      if (!confirmLeave) return;
+    }
+    router.push("/notes");
+  }, [hasUnsavedChanges, router]);
+
+  const handleEditorChange = useCallback(() => {
+    setHasUnsavedChanges(true);
+    setLastEditTime(new Date());
+    setSaveStatus(null);
+  }, []);
+
+  const handleTitleChange = (newTitle: string) => {
+    setNoteTitle(newTitle);
+    setHasUnsavedChanges(true);
+    setLastEditTime(new Date());
+    setSaveStatus(null);
+  };
+
+  // Auto-save with debouncing
+  useEffect(() => {
+    if (lastEditTime && hasUnsavedChanges) {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+
+      autoSaveTimerRef.current = setTimeout(() => {
+        handleSaveNote(true);
+      }, 3000); // Reduced to 3 seconds for better UX
+    }
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [lastEditTime, hasUnsavedChanges, handleSaveNote]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        handleSaveNote(false);
+      }
+      // Esc to go back
+      if (e.key === "Escape") {
+        handleGoBack();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSaveNote, handleGoBack]);
+
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const handleDeleteNote = async () => {
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/notes/${noteId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        router.push("/notes");
+      } else {
+        setErrorMessage(data.error || "Failed to delete note");
+        setSaveStatus("error");
+      }
+    } catch {
+      setErrorMessage("Failed to delete note. Please try again.");
+      setSaveStatus("error");
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div>
+        <Topbar>
+          <div className="text-lg font-semibold">Loading note...</div>
+        </Topbar>
+        <NoteEditorSkeleton />
+      </div>
+    );
+  }
+
+  if (!note) {
+    return (
+      <div>
+        <Topbar>
+          <div className="text-lg font-semibold">Note not found</div>
+        </Topbar>
+        <div className="flex flex-col items-center justify-center p-12">
+          <AlertCircleIcon size={48} className="text-destructive mb-4" />
+          <p className="text-muted-foreground">
+            {errorMessage || "This note doesn't exist"}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <Topbar>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={handleGoBack}>
+            <ArrowLeftIcon size={16} />
+          </Button>
+          <NoteTitle initialTitle={noteTitle} onTitleChange={handleTitleChange} />
+        </div>
+
+
+
+        <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center">
+            {/* Last saved indicator */}
+            {lastSaved && !hasUnsavedChanges && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <ClockIcon size={12} />
+                <span>Saved {getRelativeTime(lastSaved)}</span>
+              </div>
+            )}
+          </div>
+
+
+          {saveStatus === "saved" && (
+            <div className="flex items-center gap-1 text-sm text-green-600">
+              <CheckCircleIcon size={16} />
+              <span>Saved</span>
+            </div>
+          )}
+
+          {saveStatus === "error" && errorMessage && (
+            <div className="flex items-center gap-1 text-sm text-destructive">
+              <AlertCircleIcon size={16} />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          <Button
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={isDeleting || isSaving}
+            variant="destructive"
+            size="sm"
+          >
+            {isDeleting ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <TrashIcon size={16} className="mr-2" />
+                Delete
+              </>
+            )}
+          </Button>
+
+          <Button
+            onClick={() => handleSaveNote(false)}
+            disabled={isSaving || !hasUnsavedChanges}
+            size="sm"
+          >
+            {isSaving ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <SaveIcon size={16} className="mr-2" />
+                {hasUnsavedChanges ? "Save Changes" : "Saved"}
+              </>
+            )}
+          </Button>
+        </div>
+      </Topbar>
+
+      <div className="px-4 py-2 border-b">
+        <NoteTags
+          tags={tags}
+          onChange={(newTags) => {
+            setTags(newTags);
+            setHasUnsavedChanges(true);
+            setLastEditTime(new Date());
+            setSaveStatus(null);
+          }}
+        />
+      </div>
+
+      <div className="">
+        <SimpleEditor
+          ref={editorRef}
+          initialContent={note.contentJSON}
+          onChange={handleEditorChange}
+        />
+      </div>
+
+      <DeleteDialog
+        isOpen={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={handleDeleteNote}
+        title="Delete Note"
+        description="This action cannot be undone. This will permanently delete your note"
+        itemName={noteTitle}
+        isDeleting={isDeleting}
+      />
+    </div>
+  );
+}

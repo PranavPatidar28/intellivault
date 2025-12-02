@@ -1,0 +1,24 @@
+{
+  "type": "doc",
+  "content": [
+    
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Start writing your thoughts here..."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Tip: Use #tags to organize your notes"
+        }
+      ]
+    }
+  ]
+}
