@@ -1,6 +1,6 @@
 "use client";
 
-import { ClockIcon, Trash2Icon } from "lucide-react";
+import { ClockIcon, Trash2Icon, Sparkles } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -17,6 +17,7 @@ interface NoteCardProps {
   id: string;
   title: string;
   contentText: string;
+  summary?: string | null;
   tags?: { id: string; name: string; color: string | null }[];
   createdAt: Date;
 }
@@ -25,6 +26,7 @@ export default function NotesCard({
   id,
   title,
   contentText,
+  summary,
   tags,
   createdAt,
   onDelete,
@@ -49,7 +51,7 @@ export default function NotesCard({
 
   return (
     <Card
-      className="group relative flex flex-col min-w-100 cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border-border/50 hover:border-primary/50 bg-card/50 hover:bg-card"
+      className="group relative flex flex-col cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border-border/50 hover:border-primary/50 bg-card/50 hover:bg-card"
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       tabIndex={0}
@@ -79,9 +81,17 @@ export default function NotesCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground/90 line-clamp-4 leading-relaxed">
-          {truncateText(contentText || "No content", 150)}
-        </p>
+        <div className="relative">
+          {summary && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-primary font-medium mb-1">
+              <Sparkles size={10} />
+              AI Summary
+            </span>
+          )}
+          <p className="text-sm text-muted-foreground/90 line-clamp-4 leading-relaxed">
+            {truncateText(summary || contentText || "No content", 150)}
+          </p>
+        </div>
         {tags && tags.length > 0 && (
           <div className="mt-auto pt-3 flex flex-wrap gap-1.5">
             {tags.slice(0, 3).map((tag) => (

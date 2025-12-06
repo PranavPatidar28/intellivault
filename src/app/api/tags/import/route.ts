@@ -65,9 +65,14 @@ export async function POST(request: NextRequest) {
 
     for (const tagData of tagsToImport) {
       try {
-        // Check if tag exists
+        // Check if tag exists for this user
         const existingTag = await prisma.tag.findUnique({
-          where: { slug: slugify(tagData.name) },
+          where: {
+            userId_slug: {
+              userId: session.user.id,
+              slug: slugify(tagData.name),
+            },
+          },
         });
 
         if (existingTag) {
@@ -97,6 +102,7 @@ export async function POST(request: NextRequest) {
                 description: tagData.description,
                 isFavorite: tagData.isFavorite || false,
                 isArchived: tagData.isArchived || false,
+                userId: session.user.id,
               },
             });
             imported.push(tagData.name);
@@ -111,6 +117,7 @@ export async function POST(request: NextRequest) {
               description: tagData.description,
               isFavorite: tagData.isFavorite || false,
               isArchived: tagData.isArchived || false,
+              userId: session.user.id,
             },
           });
           imported.push(tagData.name);

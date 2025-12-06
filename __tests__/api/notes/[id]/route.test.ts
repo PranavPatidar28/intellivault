@@ -15,6 +15,12 @@ jest.mock('next/headers', () => ({
   headers: jest.fn(() => Promise.resolve(new Headers())),
 }));
 
+// Mock embedding service
+jest.mock("@/lib/ai/embedding-sync", () => ({
+  embedNote: jest.fn().mockResolvedValue({ success: true }),
+  handleNoteDeleted: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('Individual Note API - GET /api/notes/[id]', () => {
   beforeEach(() => {
     jest.clearAllMocks();

@@ -31,6 +31,8 @@ export async function GET(
         createdAt: true,
         updatedAt: true,
         tags: true,
+        summary: true,
+        generatedTitle: true,
       },
     });
 
@@ -96,11 +98,11 @@ export async function PUT(
         body.tags.map(async (tagName) => {
           const slug = slugify(tagName);
           return await prisma.tag.upsert({
-            where: { 
-              userId_slug: { 
-                userId: session.user.id, 
-                slug: slug 
-              } 
+            where: {
+              userId_slug: {
+                userId: session.user.id,
+                slug: slug
+              }
             },
             update: {}, // No update if exists
             create: {
@@ -120,11 +122,19 @@ export async function PUT(
         title: body.title,
         contentJSON: body.contentJSON,
         contentText: body.contentText,
+        embeddingStatus: "PENDING", // Mark as pending
         tags: tagConnect ? { set: tagConnect } : undefined,
       },
       include: {
         tags: true,
       },
+    });
+
+    // Trigger embedding in background
+    import("@/lib/ai/embedding-sync").then(({ embedNote }) => {
+      embedNote(note.id).catch((err: unknown) =>
+        console.error(`Failed to auto-embed updated note ${note.id}:`, err)
+      );
     });
 
     return NextResponse.json({
@@ -175,6 +185,13 @@ export async function DELETE(
       where: {
         id,
       },
+    });
+
+    // Clean up vectors in background
+    import("@/lib/ai/embedding-sync").then(({ handleNoteDeleted }) => {
+      handleNoteDeleted(id, session.user.id).catch((err: unknown) =>
+        console.error(`Failed to clean up embedding for note ${id}:`, err)
+      );
     });
 
     return NextResponse.json({

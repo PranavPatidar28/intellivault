@@ -19,7 +19,7 @@ export default async function AppLayout({
   return (
     <SidebarProvider>
       <AppSidebar session={session} />
-      <main className="w-screen">{children}</main>
+      <main className="w-full h-screen overflow-hidden">{children}</main>
     </SidebarProvider>
   );
 }

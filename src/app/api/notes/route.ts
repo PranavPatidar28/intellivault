@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
         contentJSON: body.contentJSON ?? {},
         contentText: body.contentText ?? "",
         userId: session.user.id,
+        embeddingStatus: "PENDING", // Explicitly set pending
         tags: {
           connectOrCreate: body.tags?.map((tag) => ({
             where: { 
@@ -53,6 +54,14 @@ export async function POST(request: NextRequest) {
       include: {
         tags: true,
       },
+    });
+
+    // Trigger embedding in background (fire and forget pattern)
+    // We catch errors so we don't block the UI response
+    import("@/lib/ai/embedding-sync").then(({ embedNote }) => {
+      embedNote(note.id).catch((err: unknown) => 
+        console.error(`Failed to auto-embed note ${note.id}:`, err)
+      );
     });
 
     return NextResponse.json({

@@ -4,6 +4,15 @@
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
+// Enums
+enum EmbeddingStatus {
+  PENDING // note exists but not embedded yet
+  PROCESSING // currently being embedded by a worker
+  READY // vectors in Pinecone are up to date
+  ERROR // last attempt failed; can be retried
+  DELETED // vectors removed from Pinecone
+}
+
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -32,16 +41,31 @@ model User {
 }
 
 model Note {
-  id          String   @id @default(cuid())
-  title       String
-  contentJSON Json
-  contentText String
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tags        Tag[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  id             String  @id @default(cuid())
+  title          String
+  generatedTitle String?
+  summary        String?
+  contentJSON    Json
+  contentText    String
 
+  // Vector sync tracking
+  embeddingStatus EmbeddingStatus @default(PENDING)
+  lastEmbeddedAt  DateTime?       @db.Timestamptz(6)
+  chunkCount      Int? // how many chunks/vectors this note has in Pinecone
+
+  // AI processing tracking
+  aiProcessedAt DateTime? @db.Timestamptz(6)
+  contentHash   String? // For change detection
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags      Tag[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([userId])
+  @@index([embeddingStatus])
+  @@index([updatedAt])
   @@map("note")
 }
 

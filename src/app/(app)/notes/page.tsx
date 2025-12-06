@@ -6,6 +6,7 @@ import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import NotesCard from "@/components/NoteCard";
 import AddNoteModal from "@/components/AddNoteModal";
+import { NoteSearch } from "@/components/NoteSearch";
 import { useNotes } from "@/hooks/use-notes";
 import { Note } from "@/types/note";
 import { NoteListSkeleton } from "@/components/skeletons/note-skeleton";
@@ -36,7 +37,7 @@ const NotesArea = ({ notes, onDelete }: { notes: Note[]; onDelete: (id: string) 
 
   return (
     <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {notes.map(({ id, title, contentText, createdAt, tags }) => (
+      {notes.map(({ id, title, contentText, summary, createdAt, tags }) => (
         <NotesCard
           key={id}
           title={title}
@@ -45,6 +46,7 @@ const NotesArea = ({ notes, onDelete }: { notes: Note[]; onDelete: (id: string) 
               ? contentText
               : JSON.stringify(contentText)
           }
+          summary={summary}
           createdAt={new Date(createdAt)}
           id={id}
           tags={tags}
@@ -109,7 +111,12 @@ export default function NotesPage() {
   return (
     <div className="">
       <Topbar>
-        <div className="p-2 text-lg font-semibold">Notes</div>
+        <div className="flex items-center gap-6 flex-1">
+          <div className="p-2 text-lg font-semibold min-w-fit">Notes</div>
+          <div className="w-full max-w-xl">
+            <NoteSearch />
+          </div>
+        </div>
         <div>
           <Button onClick={() => setIsAddNoteModalOpen(true)}>
             <PlusSquareIcon size={16} className="mr-2" />

@@ -23,6 +23,7 @@ import { NoteEditorSkeleton } from "@/components/skeletons/note-skeleton";
 import { getRelativeTime } from "@/lib/utils/text";
 import { Tag } from "@/components/TagInput";
 import { NoteTags } from "@/components/NoteTags";
+import { AISidebar } from "@/components/AISidebar";
 
 export default function NotePage() {
   const params = useParams();
@@ -39,8 +40,23 @@ export default function NotePage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastEditTime, setLastEditTime] = useState<Date | null>(null);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
   const editorRef = useRef<SimpleEditorRef>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
+
+  // Load AI sidebar state from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem("ai-sidebar-open");
+    if (stored === "true") {
+      setIsAISidebarOpen(true);
+    }
+  }, []);
+
+  const toggleAISidebar = () => {
+    const newState = !isAISidebarOpen;
+    setIsAISidebarOpen(newState);
+    localStorage.setItem("ai-sidebar-open", String(newState));
+  };
 
   const noteId = params.id as string;
 
@@ -189,6 +205,12 @@ export default function NotePage() {
       if (e.key === "Escape") {
         handleGoBack();
       }
+
+      // Ctrl+\ to toggle AI Sidebar
+      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
+        e.preventDefault();
+        toggleAISidebar();
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -260,7 +282,7 @@ export default function NotePage() {
   }
 
   return (
-    <div>
+    <div className="h-full flex flex-col overflow-hidden">
       <Topbar>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={handleGoBack}>
@@ -336,23 +358,57 @@ export default function NotePage() {
         </div>
       </Topbar>
 
-      <div className="px-4 py-2 border-b">
-        <NoteTags
-          tags={tags}
-          onChange={(newTags) => {
-            setTags(newTags);
+      {/* Main content area with flex layout */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Left Column: Tags + Editor */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Tags bar */}
+          <div className="px-4 py-2 border-b shrink-0">
+            <NoteTags
+              tags={tags}
+              onChange={(newTags) => {
+                setTags(newTags);
+                setHasUnsavedChanges(true);
+                setLastEditTime(new Date());
+                setSaveStatus(null);
+              }}
+            />
+          </div>
+
+          {/* Editor */}
+          <div className="flex-1 overflow-auto">
+            <SimpleEditor
+              ref={editorRef}
+              initialContent={note.contentJSON}
+              onChange={handleEditorChange}
+            />
+          </div>
+        </div>
+
+        {/* Right Column: AI Sidebar (Persistent) */}
+        <AISidebar
+          noteId={noteId}
+          currentTags={tags}
+          isOpen={isAISidebarOpen}
+          onToggle={toggleAISidebar}
+          onApplyTags={(tagNames) => {
+            const newTags = tagNames.map((name) => ({
+              id: `temp-${Date.now()}-${name}`,
+              name,
+              color: null,
+            }));
+            setTags((prev) => [...prev, ...newTags]);
             setHasUnsavedChanges(true);
             setLastEditTime(new Date());
-            setSaveStatus(null);
           }}
-        />
-      </div>
-
-      <div className="">
-        <SimpleEditor
-          ref={editorRef}
-          initialContent={note.contentJSON}
-          onChange={handleEditorChange}
+          onApplyTitle={(title) => {
+            setNoteTitle(title);
+            setHasUnsavedChanges(true);
+            setLastEditTime(new Date());
+          }}
+          content={note.contentText}
+          initialSummary={note.summary}
+          initialGeneratedTitle={note.generatedTitle}
         />
       </div>
 
