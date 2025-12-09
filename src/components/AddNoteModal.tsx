@@ -1,21 +1,36 @@
 "use client";
 
-import { FullscreenIcon, XIcon, AlertCircleIcon, CheckCircleIcon } from "lucide-react";
+import { useRef, useState, useEffect, useCallback } from "react";
+import { Maximize2, Minimize2, Loader2, AlertCircle, CheckCircle2, X, Keyboard } from "lucide-react";
 import { Button } from "./ui/button";
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from "./ui/card";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "./ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
 import {
   SimpleEditor,
   SimpleEditorRef,
 } from "./tiptap-templates/simple/simple-editor";
-import React, { useRef, useState, useEffect } from "react";
-import { Input } from "./ui/input";
 import { TagInput } from "./TagInput";
+import { cn } from "@/lib/utils";
+
+const DRAFT_KEY = "intellivault_note_draft";
+const MAX_TITLE_LENGTH = 200;
+
+interface NoteDraft {
+  title: string;
+  tags: string[];
+  savedAt: number;
+}
 
 interface NoteModalProps {
   isAddNoteModalOpen: boolean;
@@ -33,44 +48,96 @@ export default function AddNoteModal({
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [titleLength, setTitleLength] = useState(0);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const noteTitleRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<SimpleEditorRef>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Focus title input when modal opens
+  // Load draft on modal open
   useEffect(() => {
-    if (isAddNoteModalOpen && noteTitleRef.current) {
+    if (isAddNoteModalOpen) {
+      try {
+        const savedDraft = localStorage.getItem(DRAFT_KEY);
+        if (savedDraft) {
+          const draft: NoteDraft = JSON.parse(savedDraft);
+          // Only restore if saved within last 24 hours
+          if (Date.now() - draft.savedAt < 24 * 60 * 60 * 1000) {
+            if (noteTitleRef.current && draft.title) {
+              noteTitleRef.current.value = draft.title;
+              setTitleLength(draft.title.length);
+            }
+            if (draft.tags) {
+              setTags(draft.tags);
+            }
+          }
+        }
+      } catch {
+        // Ignore parse errors
+      }
       setTimeout(() => noteTitleRef.current?.focus(), 100);
     }
   }, [isAddNoteModalOpen]);
 
-  // Keyboard shortcuts
+  // Auto-save draft every 30 seconds
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Esc to close
-      if (e.key === "Escape") {
-        setIsAddNoteModalOpen(false);
-      }
-      // Ctrl+Enter to save
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-        e.preventDefault();
-        handleSaveNote();
+    if (!isAddNoteModalOpen) return;
+
+    const saveDraft = () => {
+      const title = noteTitleRef.current?.value || "";
+      if (title || tags.length > 0) {
+        const draft: NoteDraft = {
+          title,
+          tags,
+          savedAt: Date.now(),
+        };
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
       }
     };
 
-    if (isAddNoteModalOpen) {
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
+    autoSaveTimerRef.current = setInterval(saveDraft, 30000);
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current);
+      }
+    };
+  }, [isAddNoteModalOpen, tags]);
+
+  // Track unsaved changes
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTitleLength(e.target.value.length);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleTagsChange = (newTags: string[]) => {
+    setTags(newTags);
+    setHasUnsavedChanges(true);
+  };
+
+  // Clear draft on successful save
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+  };
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isAddNoteModalOpen) {
+      setError(null);
+      setShowSuccess(false);
+      setTags([]);
+      setTitleLength(0);
+      setHasUnsavedChanges(false);
+      if (noteTitleRef.current) noteTitleRef.current.value = "";
     }
   }, [isAddNoteModalOpen]);
 
-  const handleSaveNote = async () => {
+  const handleSaveNote = useCallback(async () => {
     if (!editorRef.current || !noteTitleRef.current) return;
 
     const title = noteTitleRef.current.value.trim();
     const contentJSON = editorRef.current.getJSON();
     const contentText = editorRef.current.getText();
 
-    // Validation
     setError(null);
 
     if (!title) {
@@ -79,8 +146,8 @@ export default function AddNoteModal({
       return;
     }
 
-    if (title.length > 200) {
-      setError("Title is too long (maximum 200 characters)");
+    if (title.length > MAX_TITLE_LENGTH) {
+      setError(`Title is too long (maximum ${MAX_TITLE_LENGTH} characters)`);
       noteTitleRef.current?.focus();
       return;
     }
@@ -103,122 +170,206 @@ export default function AddNoteModal({
       const data = await response.json();
 
       if (response.ok && data.success) {
-        // Show success state briefly
         setShowSuccess(true);
+        clearDraft();
+        setHasUnsavedChanges(false);
 
-        // Reset form
-        if (noteTitleRef.current) noteTitleRef.current.value = "";
-        setTags([]);
-
-        // Call callback and close modal after brief delay
         setTimeout(() => {
           onNoteCreated?.();
           setIsAddNoteModalOpen(false);
-          setShowSuccess(false);
         }, 500);
       } else {
         setError(data.error || "Failed to save note. Please try again.");
       }
-    } catch (err) {
+    } catch {
       setError("Network error. Please check your connection and try again.");
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [tags, onNoteCreated, setIsAddNoteModalOpen]);
 
-  const handleClose = () => {
-    if (!isSaving) {
-      setIsAddNoteModalOpen(false);
-      setError(null);
-      setShowSuccess(false);
-      setTags([]);
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (isAddNoteModalOpen) {
+          e.preventDefault();
+          handleSaveNote();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isAddNoteModalOpen, handleSaveNote]);
+
+  const handleOpenChange = (open: boolean) => {
+    if (isSaving) return;
+    if (!open && hasUnsavedChanges) {
+      // Save draft before closing
+      const title = noteTitleRef.current?.value || "";
+      if (title || tags.length > 0) {
+        const draft: NoteDraft = { title, tags, savedAt: Date.now() };
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      }
     }
+    setIsAddNoteModalOpen(open);
   };
 
   return (
-    <div className="fixed inset-0 z-10 flex items-center justify-center">
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={handleClose}
-      />
-
-      <Card
-        className={`relative z-20 bg-accent flex flex-col transition-all duration-300 ease-in-out ${isFullScreen ? "h-screen w-screen" : "h-8/10 w-2/3"
-          }`}
+    <Dialog open={isAddNoteModalOpen} onOpenChange={handleOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        className={cn(
+          "flex flex-col p-0 gap-0 overflow-hidden transition-all duration-300",
+          isFullScreen
+            ? "!inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 w-screen h-screen max-w-none max-h-none rounded-none border-none"
+            : "w-[90vw] h-[85vh] sm:max-w-4xl rounded-xl"
+        )}
       >
-        <CardHeader className="shrink-0">
-          <div className="space-y-2">
-            <Input
-              placeholder="Untitled Note"
-              ref={noteTitleRef}
-              className="text-lg font-semibold border-none shadow-none h-auto focus-visible:ring-0 p-2"
-              maxLength={200}
-              disabled={isSaving}
+        {/* Header */}
+        <DialogHeader className="px-6 py-4 border-b shrink-0 bg-muted/30">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <DialogTitle className="sr-only">New Note</DialogTitle>
+              <div className="space-y-1">
+                <input
+                  ref={noteTitleRef}
+                  className="w-full text-2xl font-bold bg-transparent border-none focus:outline-none placeholder:text-muted-foreground/40"
+                  placeholder="Note Title"
+                  maxLength={MAX_TITLE_LENGTH}
+                  disabled={isSaving}
+                  onChange={handleTitleChange}
+                />
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className={cn(
+                    titleLength > MAX_TITLE_LENGTH * 0.9 && "text-amber-500",
+                    titleLength >= MAX_TITLE_LENGTH && "text-destructive"
+                  )}>
+                    {titleLength}/{MAX_TITLE_LENGTH}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 shrink-0">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => setIsFullScreen(!isFullScreen)}
+                    >
+                      {isFullScreen ? (
+                        <Minimize2 className="h-4 w-4" />
+                      ) : (
+                        <Maximize2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{isFullScreen ? "Exit Fullscreen" : "Fullscreen"}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleOpenChange(false)}
+                      disabled={isSaving}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Close</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+
+          {/* Tags Section */}
+          <div className="pt-3 mt-3 border-t border-border/50">
+            <TagInput
+              value={tags}
+              onChange={handleTagsChange}
+              placeholder="Add tags (press Enter or comma to add)..."
+              className="min-h-[32px]"
+              maxTags={10}
             />
-            <div className="px-2">
-              <TagInput value={tags} onChange={setTags} placeholder="Add tags..." />
+          </div>
+        </DialogHeader>
+
+        {/* Editor */}
+        <div className="flex-1 min-h-0 overflow-hidden relative bg-background">
+          <div className="absolute inset-0 overflow-y-auto">
+            <div className="h-full px-6 py-4">
+              <SimpleEditor ref={editorRef} />
             </div>
           </div>
-          <CardAction>
-            <Button
-              variant="ghost"
-              onClick={() => setIsFullScreen((value) => !value)}
-              disabled={isSaving}
-            >
-              <FullscreenIcon />
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={handleClose}
-              disabled={isSaving}
-            >
-              <XIcon />
-            </Button>
-          </CardAction>
-        </CardHeader>
+        </div>
 
-        <CardContent className="flex-1 min-h-0 pb-4">
-          <SimpleEditor ref={editorRef} />
-        </CardContent>
-
-        <CardFooter className="flex flex-col items-end gap-2">
-          {/* Error message */}
-          {error && (
-            <div className="w-full flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-              <AlertCircleIcon size={16} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Success message */}
-          {showSuccess && (
-            <div className="w-full flex items-center gap-2 text-sm text-green-600 bg-green-600/10 p-3 rounded-md">
-              <CheckCircleIcon size={16} />
-              <span>Note created successfully!</span>
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={handleClose}
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSaveNote} disabled={isSaving}>
-              {isSaving ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                  Saving...
-                </>
-              ) : (
-                "Add Note"
+        {/* Footer */}
+        <DialogFooter className="px-6 py-3 border-t bg-muted/30 shrink-0">
+          <div className="flex items-center justify-between w-full gap-4">
+            {/* Left: Status messages */}
+            <div className="flex-1 flex items-center gap-4 overflow-hidden">
+              {error && (
+                <div className="flex items-center gap-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{error}</span>
+                </div>
               )}
-            </Button>
+              {showSuccess && (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>Saved successfully</span>
+                </div>
+              )}
+              {!error && !showSuccess && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Keyboard className="h-3.5 w-3.5" />
+                  <span>Ctrl+Enter to save</span>
+                </div>
+              )}
+            </div>
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="ghost"
+                onClick={() => handleOpenChange(false)}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSaveNote} disabled={isSaving || showSuccess}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving
+                  </>
+                ) : showSuccess ? (
+                  <>
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    Saved
+                  </>
+                ) : (
+                  "Save Note"
+                )}
+              </Button>
+            </div>
           </div>
-        </CardFooter>
-      </Card>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
