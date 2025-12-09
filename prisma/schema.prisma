@@ -13,6 +13,13 @@ enum EmbeddingStatus {
   DELETED // vectors removed from Pinecone
 }
 
+enum FileType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -24,17 +31,18 @@ datasource db {
 }
 
 model User {
-  id            String    @id
+  id            String            @id
   name          String
   email         String
-  emailVerified Boolean   @default(false)
+  emailVerified Boolean           @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @default(now()) @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @default(now()) @updatedAt
   sessions      Session[]
   accounts      Account[]
   notes         Note[]
   tags          Tag[]
+  attachments   MediaAttachment[]
 
   @@unique([email])
   @@map("user")
@@ -57,16 +65,40 @@ model Note {
   aiProcessedAt DateTime? @db.Timestamptz(6)
   contentHash   String? // For change detection
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tags      Tag[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags        Tag[]
+  attachments MediaAttachment[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @default(now()) @updatedAt
 
   @@index([userId])
   @@index([embeddingStatus])
   @@index([updatedAt])
   @@map("note")
+}
+
+model MediaAttachment {
+  id       String   @id @default(cuid())
+  url      String   @unique
+  pathname String // Path in blob storage
+  filename String // Original filename
+  mimeType String
+  fileType FileType
+  size     Int // File size in bytes
+  metadata Json? // Duration, dimensions, etc.
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  noteId String? // Optional link to note (for cleanup)
+  note   Note?   @relation(fields: [noteId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([noteId])
+  @@map("media_attachment")
 }
 
 model Tag {

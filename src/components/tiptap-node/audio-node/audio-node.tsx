@@ -1,0 +1,40 @@
+/**
+ * Audio Node React Component for TipTap
+ */
+
+"use client";
+
+import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
+import { Music } from "lucide-react";
+import "./audio-node.scss";
+
+export const AudioNode: React.FC<NodeViewProps> = ({ node, selected }) => {
+    const { src, title } = node.attrs;
+
+    // Extract filename from src if no title provided
+    const displayTitle = title || (src ? src.split("/").pop()?.split("?")[0] : "Audio file");
+
+    return (
+        <NodeViewWrapper
+            className={`tiptap-audio-node ${selected ? "selected" : ""}`}
+            data-drag-handle
+        >
+            <div className="tiptap-audio-container">
+                <div className="tiptap-audio-header">
+                    <Music className="tiptap-audio-icon" size={20} />
+                    <span className="tiptap-audio-title">{displayTitle}</span>
+                </div>
+                <audio
+                    src={src}
+                    controls
+                    preload="metadata"
+                    className="tiptap-audio-player"
+                >
+                    Your browser does not support the audio element.
+                </audio>
+            </div>
+        </NodeViewWrapper>
+    );
+};
+
+export default AudioNode;

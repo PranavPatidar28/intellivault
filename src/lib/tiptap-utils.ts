@@ -369,18 +369,55 @@ export const handleImageUpload = async (
     )
   }
 
-  // For demo/testing: Simulate upload progress. In production, replace the following code
-  // with your own upload implementation.
-  for (let progress = 0; progress <= 100; progress += 10) {
+  // Check if aborted before starting
+  if (abortSignal?.aborted) {
+    throw new Error("Upload cancelled")
+  }
+
+  // Create form data
+  const formData = new FormData()
+  formData.append("file", file)
+
+  // Report initial progress
+  onProgress?.({ progress: 10 })
+
+  try {
+    // Upload to Vercel Blob via API route
+    const response = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+      signal: abortSignal,
+    })
+
+    onProgress?.({ progress: 80 })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || "Upload failed")
+    }
+
+    const result = await response.json()
+
+    if (!result.success || !result.data?.url) {
+      throw new Error("Upload failed: No URL returned")
+    }
+
+    onProgress?.({ progress: 100 })
+
+    return result.data.url
+  } catch (error) {
     if (abortSignal?.aborted) {
       throw new Error("Upload cancelled")
     }
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    onProgress?.({ progress })
+    throw error
   }
-
-  return "/images/tiptap-ui-placeholder-image.jpg"
 }
+
+/**
+ * Handles media file upload (images, videos, audio, documents)
+ * Uses the same API endpoint as handleImageUpload
+ */
+export const handleMediaUpload = handleImageUpload
 
 type ProtocolOptions = {
   /**

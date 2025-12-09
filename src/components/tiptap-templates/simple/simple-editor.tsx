@@ -26,6 +26,9 @@ import {
 // --- Tiptap Node ---
 import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension"
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension"
+import { VideoNodeExtension } from "@/components/tiptap-node/video-node"
+import { AudioNodeExtension } from "@/components/tiptap-node/audio-node"
+import { FileAttachmentNodeExtension } from "@/components/tiptap-node/file-attachment-node"
 import "@/components/tiptap-node/blockquote-node/blockquote-node.scss"
 import "@/components/tiptap-node/code-block-node/code-block-node.scss"
 import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss"
@@ -33,6 +36,9 @@ import "@/components/tiptap-node/list-node/list-node.scss"
 import "@/components/tiptap-node/image-node/image-node.scss"
 import "@/components/tiptap-node/heading-node/heading-node.scss"
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss"
+import "@/components/tiptap-node/video-node/video-node.scss"
+import "@/components/tiptap-node/audio-node/audio-node.scss"
+import "@/components/tiptap-node/file-attachment-node/file-attachment-node.scss"
 
 // --- Tiptap UI ---
 import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu"
@@ -237,6 +243,9 @@ export const SimpleEditor = forwardRef<SimpleEditorRef, SimpleEditorProps>(funct
         upload: handleImageUpload,
         onError: (error) => console.error("Upload failed:", error),
       }),
+      VideoNodeExtension,
+      AudioNodeExtension,
+      FileAttachmentNodeExtension,
     ],
     content: props.initialContent,
     onUpdate: ({ editor }) => {
