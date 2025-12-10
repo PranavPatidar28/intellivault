@@ -46,6 +46,7 @@
     "@tiptap/pm": "^3.10.5",
     "@tiptap/react": "^3.10.5",
     "@tiptap/starter-kit": "^3.10.5",
+    "@vercel/analytics": "^1.6.1",
     "@vercel/blob": "^2.0.0",
     "@zxcvbn-ts/core": "^3.0.4",
     "@zxcvbn-ts/language-common": "^3.0.4",
