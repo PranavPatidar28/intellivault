@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Home, Inbox, Search, Settings } from "lucide-react";
+import { Calendar, Home, Inbox, Search, Settings, FolderOpen } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -38,6 +38,11 @@ const items = [
     title: "Tags",
     url: "/tags",
     icon: Tag,
+  },
+  {
+    title: "Media",
+    url: "/media",
+    icon: FolderOpen,
   },
   {
     title: "Search",

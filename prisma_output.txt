@@ -1,0 +1,27 @@
+﻿node.exe : Loaded Prisma config from 
+prisma.config.ts.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" 
+"C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified:  
+   (Loaded Prisma c...isma.config.ts.:Strin  
+  g) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandE 
+   rror
+ 
+
+Prisma config detected, skipping environment 
+variable loading.
+Prisma schema loaded from prisma\schema.prisma
+Error: 
+EPERM: operation not permitted, rename 'C:\Pr
+anav\Development\Projects\IntelliVault\intell
+ivault\src\generated\prisma\query_engine-wind
+ows.dll.node.tmp125188' -> 'C:\Pranav\Develop
+ment\Projects\IntelliVault\intellivault\src\g
+enerated\prisma\query_engine-windows.dll.node
+'
+
+

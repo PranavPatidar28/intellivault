@@ -3,9 +3,10 @@
  *
  * Generates summaries and titles for notes using LLM providers.
  * Includes caching via content hash to avoid re-processing unchanged notes.
+ * Supports multimodal (text + images) summarization.
  */
 
-import { generateText, streamText, type LLMOptions } from "./llm-provider";
+import { generateText, streamText, generateMultimodal, type LLMOptions, type MultimodalPart } from "./llm-provider";
 import { createHash } from "crypto";
 
 // ============================================================================
@@ -204,6 +205,80 @@ Write for someone who wants to quickly recall the essence of their note.`;
         temperature: 0.3,
         systemPrompt,
     });
+}
+
+/**
+ * Generate a summary from multimodal content (text + images)
+ * Uses vision-capable models like Gemini or Claude
+ */
+export async function generateSummaryMultimodal(
+    parts: MultimodalPart[],
+    options: SummarizationOptions = {}
+): Promise<SummarizationResult> {
+    const {
+        length = "medium",
+        style = "paragraph",
+        llmOptions = {},
+    } = options;
+
+    const lengthConfig = LENGTH_CONFIG[length];
+    const styleInstruction = STYLE_INSTRUCTIONS[style];
+
+    // Build the text prompt
+    const textPrompt = `Analyze this note content (including any images) and summarize in approximately ${lengthConfig.words} words.
+
+${styleInstruction}
+
+If the note contains images, describe their key content and how they relate to the text.
+If there is minimal text but meaningful images, focus on describing what the images show.
+
+Respond with ONLY the formatted summary. No preamble, no "Here's the summary", just the content.`;
+
+    const systemPrompt = `You are an expert note summarizer with vision capabilities. Your summaries are:
+- **Accurate**: Capture the core meaning from both text AND images
+- **Concise**: Every word earns its place
+- **Insightful**: Surface the "so what" - why this matters
+- **Well-formatted**: Use markdown (bold, bullets) for readability
+
+When analyzing images, describe what you see accurately and how it relates to the note content.`;
+
+    // Prepend the instruction to the parts
+    const contentParts: MultimodalPart[] = [
+        { type: "text", text: textPrompt },
+        ...parts,
+    ];
+
+    // Generate content hash from text parts only
+    const textContent = parts
+        .filter(p => p.type === "text" && p.text)
+        .map(p => p.text)
+        .join("\n");
+    const imageCount = parts.filter(p => p.type === "image").length;
+    const contentHash = generateContentHash(`${textContent}|images:${imageCount}`);
+
+    const startTime = Date.now();
+
+    try {
+        const response = await generateMultimodal(contentParts, {
+            ...llmOptions,
+            maxTokens: lengthConfig.maxTokens,
+            temperature: 0.3,
+            systemPrompt,
+        });
+
+        return {
+            summary: response.text.trim(),
+            confidence: calculateConfidence(textContent, response.text) * (imageCount > 0 ? 0.9 : 1),
+            contentHash,
+            provider: response.provider,
+            latencyMs: response.latencyMs,
+        };
+    } catch (error) {
+        console.error("Multimodal summarization failed:", error);
+        throw new Error(
+            `Failed to generate multimodal summary: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+    }
 }
 
 /**

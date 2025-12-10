@@ -1,7 +1,7 @@
 /**
  * Summarization API Routes
  *
- * POST /api/notes/summarize - Generate summary for a note
+ * POST /api/notes/summarize - Generate summary for a note (supports multimodal)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -9,15 +9,22 @@ import { headers as nextHeaders } from "next/headers";
 import { auth } from "@/lib/auth";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
+import type { JSONContent } from "@tiptap/core";
 import {
     generateSummary,
+    generateSummaryMultimodal,
     generateTitle,
     generateContentHash,
     hasContentChanged,
+    extractContentFromJSON,
+    validateContentForSummary,
+    prepareMultimodalContent,
+    needsMultimodalProcessing,
     type SummarizationOptions,
-} from "@/lib/ai/summarization-service";
+    type ContextOptions,
+} from "@/lib/ai";
 
-// Request validation schema
+// Request validation schema with context options
 const summarizeRequestSchema = z.object({
     noteId: z.string().min(1, "Note ID is required"),
     options: z
@@ -29,12 +36,20 @@ const summarizeRequestSchema = z.object({
             force: z.boolean().optional(), // Force re-summarization even if content unchanged
         })
         .optional(),
+    context: z
+        .object({
+            includeText: z.boolean().optional(),
+            includeImages: z.boolean().optional(),
+            maxImages: z.number().min(1).max(10).optional(),
+            includeTitle: z.boolean().optional(),
+        })
+        .optional(),
 });
 
 /**
  * POST /api/notes/summarize
  *
- * Generate a summary for a note
+ * Generate a summary for a note with optional multimodal support
  */
 export async function POST(request: NextRequest) {
     const session = await auth.api.getSession({
@@ -56,15 +71,22 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { noteId, options = {} } = result.data;
+        const { noteId, options = {}, context = {} } = result.data;
         const { force = false, ...summarizationOptions } = options;
+        const contextOptions: ContextOptions = {
+            includeText: context.includeText ?? true,
+            includeImages: context.includeImages ?? false,
+            maxImages: context.maxImages ?? 5,
+            includeTitle: context.includeTitle ?? true,
+        };
 
-        // Fetch the note
+        // Fetch the note with contentJSON for multimodal support
         const note = await prisma.note.findUnique({
             where: { id: noteId, userId: session.user.id },
             select: {
                 id: true,
                 title: true,
+                contentJSON: true,
                 contentText: true,
                 summary: true,
                 contentHash: true,
@@ -73,6 +95,20 @@ export async function POST(request: NextRequest) {
 
         if (!note) {
             return NextResponse.json({ error: "Note not found" }, { status: 404 });
+        }
+
+        // Extract structured content from JSON
+        const extracted = extractContentFromJSON(note.contentJSON as JSONContent);
+
+        // Validate content is sufficient
+        const validation = validateContentForSummary(extracted, contextOptions);
+        if (!validation.canSummarize) {
+            return NextResponse.json({
+                success: false,
+                error: validation.message,
+                suggestion: validation.suggestion,
+                suggestMultimodal: validation.suggestMultimodal,
+            }, { status: 400 });
         }
 
         // Check if content has changed since last summarization
@@ -86,9 +122,25 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // Generate summary
-        const fullContent = `Title: ${note.title}\n\n${note.contentText}`;
-        const summaryResult = await generateSummary(fullContent, summarizationOptions as SummarizationOptions);
+        let summaryResult;
+
+        // Use multimodal summarization if images are included
+        if (needsMultimodalProcessing(extracted, contextOptions)) {
+            const multimodalParts = await prepareMultimodalContent(extracted, note.title, contextOptions);
+
+            if (multimodalParts.length === 0) {
+                return NextResponse.json({
+                    success: false,
+                    error: "Failed to prepare content for summarization.",
+                }, { status: 400 });
+            }
+
+            summaryResult = await generateSummaryMultimodal(multimodalParts, summarizationOptions as SummarizationOptions);
+        } else {
+            // Standard text-only summarization
+            const fullContent = `Title: ${note.title}\n\n${note.contentText}`;
+            summaryResult = await generateSummary(fullContent, summarizationOptions as SummarizationOptions);
+        }
 
         // Update note with summary
         const updateData: Record<string, unknown> = {
@@ -116,6 +168,7 @@ export async function POST(request: NextRequest) {
             contentHash: summaryResult.contentHash,
             provider: summaryResult.provider,
             latencyMs: summaryResult.latencyMs,
+            multimodal: needsMultimodalProcessing(extracted, contextOptions),
         });
     } catch (error) {
         console.error("Error generating summary:", error);

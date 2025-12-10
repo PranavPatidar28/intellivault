@@ -23,6 +23,13 @@ export interface SummarizeOptions {
     stream?: boolean;
     /** Callback for streaming chunks */
     onChunk?: (chunk: string, accumulated: string) => void;
+    /** Context options for multimodal summarization */
+    context?: {
+        includeText?: boolean;
+        includeImages?: boolean;
+        maxImages?: number;
+        includeTitle?: boolean;
+    };
 }
 
 export interface SummarizeResult {

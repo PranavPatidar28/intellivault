@@ -92,12 +92,50 @@ export async function uploadFile(
 }
 
 /**
- * Delete a file from Vercel Blob Storage and remove the database record
+ * Recursively removes nodes from TipTap JSON content that contain a specific URL
+ */
+function removeMediaNodesFromContent(content: unknown, mediaUrl: string): unknown {
+    if (!content || typeof content !== "object") {
+        return content;
+    }
+
+    if (Array.isArray(content)) {
+        return content
+            .map((item) => removeMediaNodesFromContent(item, mediaUrl))
+            .filter((item) => item !== null);
+    }
+
+    const node = content as Record<string, unknown>;
+
+    // Check if this node has a src attribute matching the media URL
+    if (node.attrs && typeof node.attrs === "object") {
+        const attrs = node.attrs as Record<string, unknown>;
+        if (attrs.src === mediaUrl) {
+            return null; // Remove this node
+        }
+    }
+
+    // Recursively process content array
+    if (node.content && Array.isArray(node.content)) {
+        return {
+            ...node,
+            content: (node.content as unknown[])
+                .map((item) => removeMediaNodesFromContent(item, mediaUrl))
+                .filter((item) => item !== null),
+        };
+    }
+
+    return node;
+}
+
+/**
+ * Delete a file from Vercel Blob Storage, clean up note references, and remove the database record
  * 
  * @param url - The URL of the file to delete
  * @param userId - The ID of the user requesting deletion (for ownership verification)
+ * @returns Object containing info about affected notes
  */
-export async function deleteFile(url: string, userId: string): Promise<void> {
+export async function deleteFile(url: string, userId: string): Promise<{ affectedNotes: number }> {
     // Find the attachment and verify ownership
     const attachment = await prisma.mediaAttachment.findUnique({
         where: { url },
@@ -111,6 +149,57 @@ export async function deleteFile(url: string, userId: string): Promise<void> {
         throw new Error("You do not have permission to delete this file");
     }
 
+    // Find all notes containing this media URL in their JSON content
+    // We need to check the stringified JSON since media URLs are in attrs, not text
+    const allUserNotes = await prisma.note.findMany({
+        where: {
+            userId,
+        },
+        select: {
+            id: true,
+            contentJSON: true,
+            contentText: true,
+        },
+    });
+
+    // Filter notes that contain the URL in their JSON structure
+    const notesWithMedia = allUserNotes.filter(note => {
+        const jsonStr = JSON.stringify(note.contentJSON);
+        return jsonStr.includes(url);
+    });
+
+    // Clean up note content by removing media nodes
+    for (const note of notesWithMedia) {
+        const cleanedContent = removeMediaNodesFromContent(note.contentJSON, url);
+
+        // Extract text from cleaned content for contentText field
+        const extractText = (content: unknown): string => {
+            if (!content || typeof content !== "object") return "";
+            if (Array.isArray(content)) {
+                return content.map(extractText).join("");
+            }
+            const node = content as Record<string, unknown>;
+            let text = "";
+            if (typeof node.text === "string") {
+                text += node.text;
+            }
+            if (Array.isArray(node.content)) {
+                text += node.content.map(extractText).join("");
+            }
+            return text;
+        };
+
+        const cleanedText = extractText(cleanedContent);
+
+        await prisma.note.update({
+            where: { id: note.id },
+            data: {
+                contentJSON: cleanedContent as object,
+                contentText: cleanedText || note.contentText.replace(url, ""),
+            },
+        });
+    }
+
     // Delete from Vercel Blob
     await del(url);
 
@@ -118,6 +207,8 @@ export async function deleteFile(url: string, userId: string): Promise<void> {
     await prisma.mediaAttachment.delete({
         where: { id: attachment.id },
     });
+
+    return { affectedNotes: notesWithMedia.length };
 }
 
 /**

@@ -71,10 +71,3 @@ export async function POST(request: NextRequest) {
         );
     }
 }
-
-// Increase body size limit for file uploads
-export const config = {
-    api: {
-        bodyParser: false,
-    },
-};

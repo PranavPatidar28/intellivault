@@ -51,20 +51,39 @@ export {
 // LLM provider abstraction
 export {
   generateText,
+  generateMultimodal,
   getAvailableProvider,
+  getMultimodalProvider,
   getProviderStatus,
   getAllProviders,
   OllamaProvider,
   GeminiProvider,
   OpenAIProvider,
+  OpenRouterProvider,
   type LLMProvider,
   type LLMOptions,
   type LLMResponse,
+  type MultimodalPart,
 } from "./llm-provider";
+
+// Content extraction for multimodal
+export {
+  extractContentFromJSON,
+  validateContentForSummary,
+  prepareMultimodalContent,
+  fetchImageAsBase64,
+  needsMultimodalProcessing,
+  type ExtractedContent,
+  type ExtractedImage,
+  type ContentValidation,
+  type ContextOptions,
+} from "./content-extractor";
 
 // AI Summarization
 export {
   generateSummary,
+  generateSummaryStream,
+  generateSummaryMultimodal,
   generateTitle,
   generateContentHash,
   hasContentChanged,

@@ -15,6 +15,53 @@
   background: var(--color-bg-secondary, #f1f5f9);
   border-radius: 8px;
   overflow: hidden;
+  border: 1px solid var(--color-border, #e2e8f0);
+}
+
+.tiptap-video-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg-secondary, #f1f5f9);
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+
+.tiptap-video-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #64748b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.tiptap-video-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary, #64748b);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, background-color 0.2s, color 0.2s;
+  flex-shrink: 0;
+
+  .tiptap-video-node:hover &,
+  .tiptap-video-node.selected & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: var(--color-destructive, #ef4444);
+    color: white;
+  }
 }
 
 .tiptap-video-player {
@@ -22,31 +69,25 @@
   width: 100%;
   max-width: 100%;
   height: auto;
-  border-radius: 8px;
 
   &:focus {
     outline: none;
   }
 }
 
-.tiptap-video-title {
-  display: block;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  color: var(--color-text-secondary, #64748b);
-  background: var(--color-bg-secondary, #f1f5f9);
-  border-top: 1px solid var(--color-border, #e2e8f0);
-}
-
 /* Dark mode */
 .dark {
   .tiptap-video-container {
     background: var(--color-bg-secondary, #1e293b);
+    border-color: var(--color-border, #334155);
+  }
+
+  .tiptap-video-header {
+    background: var(--color-bg-secondary, #1e293b);
+    border-bottom-color: var(--color-border, #334155);
   }
 
   .tiptap-video-title {
     color: var(--color-text-secondary, #94a3b8);
-    background: var(--color-bg-secondary, #1e293b);
-    border-top-color: var(--color-border, #334155);
   }
 }

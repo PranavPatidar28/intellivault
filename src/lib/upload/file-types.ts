@@ -30,13 +30,13 @@ export const FILE_TYPE_CONFIG: Record<FileCategory, FileTypeConfig> = {
     VIDEO: {
         mimeTypes: ["video/mp4", "video/webm", "video/quicktime"],
         extensions: [".mp4", ".webm", ".mov"],
-        maxSize: 10 * 1024 * 1024, // 10MB
+        maxSize: 20 * 1024 * 1024, // 20MB
         accept: "video/*",
     },
     AUDIO: {
         mimeTypes: ["audio/mpeg", "audio/wav", "audio/ogg", "audio/webm"],
         extensions: [".mp3", ".wav", ".ogg", ".webm"],
-        maxSize: 10 * 1024 * 1024, // 10MB
+        maxSize: 20 * 1024 * 1024, // 20MB
         accept: "audio/*",
     },
     DOCUMENT: {

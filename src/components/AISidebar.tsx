@@ -22,6 +22,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useSummarize, useAutoTag, type TagSuggestion, type SummarizeOptions } from "@/hooks/use-ai-features";
@@ -186,6 +188,7 @@ export function AISidebar({
     // Settings
     const [summaryLength, setSummaryLength] = useState<SummaryLength>("medium");
     const [summaryStyle, setSummaryStyle] = useState<SummaryStyle>("paragraph");
+    const [includeImages, setIncludeImages] = useState(false);
 
     const { summarizeStream, generateTitle, isLoading: isSummarizing } = useSummarize();
     const { suggestTags, isLoading: isSuggestingTags } = useAutoTag();
@@ -230,6 +233,10 @@ export function AISidebar({
         const result = await summarizeStream(noteId, {
             length: summaryLength,
             style: summaryStyle,
+            context: {
+                includeImages,
+                maxImages: 5,
+            },
             onChunk: (_chunk, accumulated) => {
                 // Update summary state as chunks arrive
                 setSummary(accumulated);
@@ -365,6 +372,18 @@ export function AISidebar({
                                 <SelectItem value="tldr">TL;DR</SelectItem>
                             </SelectContent>
                         </Select>
+                    </div>
+
+                    {/* Include images option */}
+                    <div className="flex items-center gap-2">
+                        <Checkbox
+                            id="include-images"
+                            checked={includeImages}
+                            onCheckedChange={(checked) => setIncludeImages(checked === true)}
+                        />
+                        <Label htmlFor="include-images" className="text-[10px] text-muted-foreground cursor-pointer">
+                            Include images (uses vision AI)
+                        </Label>
                     </div>
 
                     {/* Summary Content */}

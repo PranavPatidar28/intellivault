@@ -5,7 +5,6 @@ import { EditorContent, EditorContext, useEditor } from "@tiptap/react"
 
 // --- Tiptap Core Extensions ---
 import { StarterKit } from "@tiptap/starter-kit"
-import { Image } from "@tiptap/extension-image"
 import { TaskItem, TaskList } from "@tiptap/extension-list"
 import { TextAlign } from "@tiptap/extension-text-align"
 import { Typography } from "@tiptap/extension-typography"
@@ -29,6 +28,7 @@ import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/ho
 import { VideoNodeExtension } from "@/components/tiptap-node/video-node"
 import { AudioNodeExtension } from "@/components/tiptap-node/audio-node"
 import { FileAttachmentNodeExtension } from "@/components/tiptap-node/file-attachment-node"
+import { CustomImageExtension } from "@/components/tiptap-node/image-node"
 import "@/components/tiptap-node/blockquote-node/blockquote-node.scss"
 import "@/components/tiptap-node/code-block-node/code-block-node.scss"
 import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss"
@@ -42,7 +42,7 @@ import "@/components/tiptap-node/file-attachment-node/file-attachment-node.scss"
 
 // --- Tiptap UI ---
 import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu"
-import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button"
+import { MediaButton } from "@/components/tiptap-ui/media-button"
 import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu"
 import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button"
 import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button"
@@ -156,7 +156,7 @@ const MainToolbarContent = ({
       <ToolbarSeparator />
 
       <ToolbarGroup>
-        <ImageUploadButton text="Add" />
+        <MediaButton text="Media" />
       </ToolbarGroup>
 
       <Spacer />
@@ -231,7 +231,7 @@ export const SimpleEditor = forwardRef<SimpleEditorRef, SimpleEditorProps>(funct
       TaskList,
       TaskItem.configure({ nested: true }),
       Highlight.configure({ multicolor: true }),
-      Image,
+      CustomImageExtension,
       Typography,
       Superscript,
       Subscript,

@@ -6,6 +6,7 @@
  */
 
 import { env } from "@/env";
+import { GoogleGenAI } from "@google/genai";
 
 // ============================================================================
 // Types & Interfaces
@@ -36,15 +37,32 @@ export interface LLMResponse {
     latencyMs?: number;
 }
 
+/**
+ * Multimodal content part for vision-enabled models
+ */
+export interface MultimodalPart {
+    type: "text" | "image";
+    /** Text content (when type is "text") */
+    text?: string;
+    /** Base64 encoded image data (when type is "image") */
+    base64Data?: string;
+    /** MIME type of the image (e.g., "image/jpeg", "image/png") */
+    mimeType?: string;
+}
+
 export interface LLMProvider {
     /** Provider name */
     name: string;
     /** Check if provider is available and configured */
     isAvailable(): Promise<boolean>;
+    /** Check if provider supports multimodal (vision) inputs */
+    supportsMultimodal(): boolean;
     /** Generate text from a prompt */
     generateText(prompt: string, options?: LLMOptions): Promise<LLMResponse>;
     /** Generate text with streaming */
     generateTextStream(prompt: string, options?: LLMOptions): AsyncGenerator<string, void, unknown>;
+    /** Generate text from multimodal content (text + images) */
+    generateMultimodal?(parts: MultimodalPart[], options?: LLMOptions): Promise<LLMResponse>;
     /** Estimate cost for token usage (in USD) */
     estimateCost(inputTokens: number, outputTokens: number): number;
 }
@@ -76,6 +94,10 @@ export class OllamaProvider implements LLMProvider {
         } catch {
             return false;
         }
+    }
+
+    supportsMultimodal(): boolean {
+        return false; // Ollama doesn't support vision models in this implementation
     }
 
     async generateText(prompt: string, options?: LLMOptions): Promise<LLMResponse> {
@@ -205,198 +227,170 @@ export class OllamaProvider implements LLMProvider {
 }
 
 // ============================================================================
-// Gemini Provider (Google AI)
+// Gemini Provider (Google AI) - Using Official @google/genai SDK
 // ============================================================================
 
 export class GeminiProvider implements LLMProvider {
     name = "gemini";
     private apiKey: string | undefined;
     private model: string;
-    private baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    private client: GoogleGenAI | null = null;
 
     constructor(apiKey?: string, model?: string) {
         this.apiKey = apiKey || process.env.GEMINI_API_KEY;
-        this.model = model || process.env.GEMINI_MODEL || "gemini-1.5-flash";
+        this.model = model || process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+        if (this.apiKey) {
+            this.client = new GoogleGenAI({ apiKey: this.apiKey });
+        }
     }
 
     async isAvailable(): Promise<boolean> {
-        return !!this.apiKey;
+        return !!this.apiKey && !!this.client;
+    }
+
+    supportsMultimodal(): boolean {
+        return true; // Gemini supports vision
     }
 
     async generateText(prompt: string, options?: LLMOptions): Promise<LLMResponse> {
-        if (!this.apiKey) {
+        if (!this.apiKey || !this.client) {
             throw new Error("Gemini API key not configured");
         }
 
         const startTime = Date.now();
-        const timeout = options?.timeout || 30000;
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
 
         try {
-            const contents = [];
-
-            if (options?.systemPrompt) {
-                contents.push({
-                    role: "user",
-                    parts: [{ text: options.systemPrompt }],
-                });
-                contents.push({
-                    role: "model",
-                    parts: [{ text: "Understood. I will follow these instructions." }],
-                });
-            }
-
-            contents.push({
-                role: "user",
-                parts: [{ text: prompt }],
-            });
-
-            const requestBody: Record<string, unknown> = {
-                contents,
-                generationConfig: {
+            const response = await this.client.models.generateContent({
+                model: this.model,
+                contents: prompt,
+                config: {
+                    systemInstruction: options?.systemPrompt,
                     temperature: options?.temperature ?? 0.7,
                     maxOutputTokens: options?.maxTokens || 1024,
+                    // Disable thinking for faster, more predictable responses
+                    thinkingConfig: {
+                        thinkingBudget: 0,
+                    },
                 },
-            };
+            });
 
-            const response = await fetch(
-                `${this.baseUrl}/models/${this.model}:generateContent?key=${this.apiKey}`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(requestBody),
-                    signal: controller.signal,
-                }
-            );
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(
-                    `Gemini API error: ${response.status} ${errorData.error?.message || response.statusText}`
-                );
-            }
-
-            const data = await response.json();
-            const candidate = data.candidates?.[0];
-            const text = candidate?.content?.parts?.[0]?.text || "";
+            const text = response.text || "";
+            const usageMetadata = response.usageMetadata;
 
             return {
                 text,
-                usage: data.usageMetadata ? {
-                    inputTokens: data.usageMetadata.promptTokenCount || 0,
-                    outputTokens: data.usageMetadata.candidatesTokenCount || 0,
+                usage: usageMetadata ? {
+                    inputTokens: usageMetadata.promptTokenCount || 0,
+                    outputTokens: usageMetadata.candidatesTokenCount || 0,
                 } : undefined,
                 provider: this.name,
                 latencyMs: Date.now() - startTime,
             };
         } catch (error) {
-            clearTimeout(timeoutId);
-            if (error instanceof Error && error.name === "AbortError") {
-                throw new Error(`Gemini request timed out after ${timeout}ms`);
+            if (error instanceof Error) {
+                throw new Error(`Gemini API error: ${error.message}`);
             }
             throw error;
         }
     }
 
     async *generateTextStream(prompt: string, options?: LLMOptions): AsyncGenerator<string, void, unknown> {
-        if (!this.apiKey) {
+        if (!this.apiKey || !this.client) {
             throw new Error("Gemini API key not configured");
         }
 
-        const timeout = options?.timeout || 60000;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
-
         try {
-            const contents = [];
-
-            if (options?.systemPrompt) {
-                contents.push({
-                    role: "user",
-                    parts: [{ text: options.systemPrompt }],
-                });
-                contents.push({
-                    role: "model",
-                    parts: [{ text: "Understood. I will follow these instructions." }],
-                });
-            }
-
-            contents.push({
-                role: "user",
-                parts: [{ text: prompt }],
-            });
-
-            const requestBody: Record<string, unknown> = {
-                contents,
-                generationConfig: {
+            const response = await this.client.models.generateContentStream({
+                model: this.model,
+                contents: prompt,
+                config: {
+                    systemInstruction: options?.systemPrompt,
                     temperature: options?.temperature ?? 0.7,
                     maxOutputTokens: options?.maxTokens || 1024,
+                    // Disable thinking for faster, more predictable streaming responses
+                    thinkingConfig: {
+                        thinkingBudget: 0,
+                    },
                 },
-            };
+            });
 
-            const response = await fetch(
-                `${this.baseUrl}/models/${this.model}:streamGenerateContent?key=${this.apiKey}&alt=sse`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(requestBody),
-                    signal: controller.signal,
-                }
-            );
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(
-                    `Gemini API error: ${response.status} ${errorData.error?.message || response.statusText}`
-                );
-            }
-
-            const reader = response.body?.getReader();
-            if (!reader) throw new Error("No response body");
-
-            const decoder = new TextDecoder();
-            let buffer = "";
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split("\n");
-                buffer = lines.pop() || "";
-
-                for (const line of lines) {
-                    if (!line.startsWith("data: ")) continue;
-                    const jsonStr = line.slice(6);
-                    if (!jsonStr.trim()) continue;
-                    try {
-                        const data = JSON.parse(jsonStr);
-                        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                        if (text) {
-                            yield text;
-                        }
-                    } catch {
-                        // Skip malformed JSON
-                    }
+            // Iterate through the stream chunks
+            for await (const chunk of response) {
+                const text = chunk.text;
+                if (text) {
+                    yield text;
                 }
             }
         } catch (error) {
-            clearTimeout(timeoutId);
-            if (error instanceof Error && error.name === "AbortError") {
-                throw new Error(`Gemini request timed out after ${timeout}ms`);
+            console.error("[Gemini Stream] Error:", error);
+            if (error instanceof Error) {
+                throw new Error(`Gemini streaming error: ${error.message}`);
+            }
+            throw error;
+        }
+    }
+
+    async generateMultimodal(parts: MultimodalPart[], options?: LLMOptions): Promise<LLMResponse> {
+        if (!this.apiKey || !this.client) {
+            throw new Error("Gemini API key not configured");
+        }
+
+        const startTime = Date.now();
+
+        try {
+            // Convert our parts to Gemini SDK format
+            const contents: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+
+            for (const part of parts) {
+                if (part.type === "text" && part.text) {
+                    contents.push({ text: part.text });
+                } else if (part.type === "image" && part.base64Data) {
+                    contents.push({
+                        inlineData: {
+                            mimeType: part.mimeType || "image/jpeg",
+                            data: part.base64Data,
+                        },
+                    });
+                }
+            }
+
+            const response = await this.client.models.generateContent({
+                model: this.model,
+                contents: contents,
+                config: {
+                    systemInstruction: options?.systemPrompt,
+                    temperature: options?.temperature ?? 0.7,
+                    maxOutputTokens: options?.maxTokens || 1024,
+                    thinkingConfig: {
+                        thinkingBudget: 0,
+                    },
+                },
+            });
+
+            const text = response.text || "";
+            const usageMetadata = response.usageMetadata;
+
+            return {
+                text,
+                usage: usageMetadata ? {
+                    inputTokens: usageMetadata.promptTokenCount || 0,
+                    outputTokens: usageMetadata.candidatesTokenCount || 0,
+                } : undefined,
+                provider: this.name,
+                latencyMs: Date.now() - startTime,
+            };
+        } catch (error) {
+            console.error("[Gemini Multimodal] Error:", error);
+            if (error instanceof Error) {
+                throw new Error(`Gemini multimodal error: ${error.message}`);
             }
             throw error;
         }
     }
 
     estimateCost(inputTokens: number, outputTokens: number): number {
-        // Gemini 1.5 Flash pricing (as of Dec 2024)
+        // Gemini 2.5 Flash pricing (as of Dec 2024)
         // $0.075 per 1M input tokens, $0.30 per 1M output tokens
         return (inputTokens * 0.000000075) + (outputTokens * 0.0000003);
     }
@@ -419,6 +413,10 @@ export class OpenAIProvider implements LLMProvider {
 
     async isAvailable(): Promise<boolean> {
         return !!this.apiKey;
+    }
+
+    supportsMultimodal(): boolean {
+        return false; // GPT-4V support can be added later
     }
 
     async generateText(prompt: string, options?: LLMOptions): Promise<LLMResponse> {
@@ -616,6 +614,10 @@ export class OpenRouterProvider implements LLMProvider {
         return !!this.apiKey;
     }
 
+    supportsMultimodal(): boolean {
+        return true; // OpenRouter supports vision models like Claude 3.5
+    }
+
     async generateText(prompt: string, options?: LLMOptions): Promise<LLMResponse> {
         if (!this.apiKey) {
             throw new Error("OpenRouter API key not configured");
@@ -808,6 +810,103 @@ export class OpenRouterProvider implements LLMProvider {
         }
     }
 
+    async generateMultimodal(parts: MultimodalPart[], options?: LLMOptions): Promise<LLMResponse> {
+        if (!this.apiKey) {
+            throw new Error("OpenRouter API key not configured");
+        }
+
+        const startTime = Date.now();
+        const timeout = options?.timeout || 60000;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        try {
+            const messages = [];
+
+            if (options?.systemPrompt) {
+                messages.push({
+                    role: "system",
+                    content: options.systemPrompt,
+                });
+            }
+
+            // Build multimodal user message with OpenAI-compatible format
+            const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+
+            for (const part of parts) {
+                if (part.type === "text" && part.text) {
+                    contentParts.push({ type: "text", text: part.text });
+                } else if (part.type === "image" && part.base64Data) {
+                    contentParts.push({
+                        type: "image_url",
+                        image_url: {
+                            url: `data:${part.mimeType || "image/jpeg"};base64,${part.base64Data}`,
+                        },
+                    });
+                }
+            }
+
+            messages.push({
+                role: "user",
+                content: contentParts,
+            });
+
+            // Use a vision-capable model for multimodal
+            const visionModel = process.env.OPENROUTER_VISION_MODEL || "anthropic/claude-3.5-sonnet";
+
+            const requestBody: Record<string, unknown> = {
+                model: visionModel,
+                messages,
+                temperature: options?.temperature ?? 0.7,
+            };
+
+            if (options?.maxTokens) {
+                requestBody.max_tokens = options.maxTokens;
+            }
+
+            const response = await fetch(`${this.baseUrl}/chat/completions`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${this.apiKey}`,
+                    "HTTP-Referer": "https://intellivault.app",
+                    "X-Title": "IntelliVault",
+                },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                    `OpenRouter API error: ${response.status} ${errorData.error?.message || response.statusText}`
+                );
+            }
+
+            const data = await response.json();
+            const text = data.choices?.[0]?.message?.content || "";
+
+            return {
+                text,
+                usage: data.usage ? {
+                    inputTokens: data.usage.prompt_tokens || 0,
+                    outputTokens: data.usage.completion_tokens || 0,
+                } : undefined,
+                provider: `${this.name} (${visionModel})`,
+                latencyMs: Date.now() - startTime,
+            };
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error instanceof Error && error.name === "AbortError") {
+                throw new Error(`OpenRouter multimodal request timed out after ${timeout}ms`);
+            }
+            throw error;
+        }
+    }
+
     estimateCost(inputTokens: number, outputTokens: number): number {
         // Cost varies by model - using GPT-4o-mini as default estimate
         // OpenRouter adds ~5% markup over direct provider pricing
@@ -934,4 +1033,49 @@ export async function* streamText(
     }
 
     throw new Error(`All LLM providers failed to stream: ${errors.join("; ")}`);
+}
+
+/**
+ * Get the first available multimodal-capable LLM provider
+ */
+export async function getMultimodalProvider(): Promise<LLMProvider | null> {
+    const providers = getAllProviders();
+
+    for (const provider of providers) {
+        if (provider.supportsMultimodal() && await provider.isAvailable()) {
+            return provider;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Generate text from multimodal content (text + images) using the first available multimodal provider
+ */
+export async function generateMultimodal(
+    parts: MultimodalPart[],
+    options?: LLMOptions
+): Promise<LLMResponse> {
+    const providers = getAllProviders();
+    const errors: string[] = [];
+
+    for (const provider of providers) {
+        try {
+            if (provider.supportsMultimodal() && provider.generateMultimodal && await provider.isAvailable()) {
+                return await provider.generateMultimodal(parts, options);
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Unknown error";
+            errors.push(`${provider.name}: ${message}`);
+            console.warn(`LLM provider ${provider.name} multimodal failed:`, message);
+            // Continue to next provider
+        }
+    }
+
+    if (errors.length === 0) {
+        throw new Error("No multimodal-capable LLM provider is available. Configure Gemini or OpenRouter.");
+    }
+
+    throw new Error(`All multimodal LLM providers failed: ${errors.join("; ")}`);
 }

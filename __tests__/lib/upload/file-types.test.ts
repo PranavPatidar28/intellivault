@@ -77,8 +77,8 @@ describe("file-types", () => {
     describe("getMaxFileSize", () => {
         it("should return correct max size for each category", () => {
             expect(getMaxFileSize("IMAGE")).toBe(5 * 1024 * 1024); // 5MB
-            expect(getMaxFileSize("VIDEO")).toBe(10 * 1024 * 1024); // 10MB
-            expect(getMaxFileSize("AUDIO")).toBe(10 * 1024 * 1024); // 10MB
+            expect(getMaxFileSize("VIDEO")).toBe(20 * 1024 * 1024); // 20MB
+            expect(getMaxFileSize("AUDIO")).toBe(20 * 1024 * 1024); // 20MB
             expect(getMaxFileSize("DOCUMENT")).toBe(10 * 1024 * 1024); // 10MB
         });
     });
