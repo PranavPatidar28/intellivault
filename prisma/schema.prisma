@@ -20,6 +20,12 @@ enum FileType {
   DOCUMENT
 }
 
+enum NoteStatus {
+  DRAFT // AI Dump in progress, not finalized
+  FINAL // Saved/published note
+  ARCHIVED // Soft-deleted or archived
+}
+
 generator client {
   provider      = "prisma-client-js"
   output        = "../src/generated/prisma"
@@ -57,8 +63,27 @@ model Note {
   contentJSON    Json
   contentText    String
 
+  // Note lifecycle status
+  status NoteStatus @default(FINAL)
+
+  // AI Dump specific fields (nullable for regular notes)
+  rawText          String? @db.Text // Original input before AI processing
+  source           String? // webclipper, upload, clipboard, paste
+  originalFilename String?
+
+  // Generated AI content
+  titles  Json? // Array of {variant, text, score}
+  tldr    String? @db.Text
+  actions Json? // Array of {text, assignee, due_date, confidence}
+
+  // Processing options & provenance
+  aiOptions  Json? // template, toggles, tone, temperature
+  provenance Json? // llm_model, prompt_template_id, temperature, generatedAt
+  versions   Json  @default("[]") // Array of version snapshots
+
   // Vector sync tracking
   embeddingStatus EmbeddingStatus @default(PENDING)
+  embeddingsMeta  Json? // chunks, provider, model (for AI Dump)
   lastEmbeddedAt  DateTime?       @db.Timestamptz(6)
   chunkCount      Int? // how many chunks/vectors this note has in Pinecone
 
@@ -76,6 +101,7 @@ model Note {
   @@index([userId])
   @@index([embeddingStatus])
   @@index([updatedAt])
+  @@index([status])
   @@map("note")
 }
 
