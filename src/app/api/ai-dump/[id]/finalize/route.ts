@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { finalizeNoteSchema } from "@/lib/validations/ai-dump";
 import { NoteStatus } from "@/generated/prisma";
 import { slugify } from "@/lib/utils/text";
+import { markdownToTipTap, stripCodeFences } from "@/lib/utils/markdown-to-tiptap";
 
 /**
  * POST /api/ai-dump/[id]/finalize
@@ -54,12 +55,18 @@ export async function POST(
             );
         }
 
+        // Strip code fences and convert markdown to TipTap JSON
+        const cleanMarkdown = stripCodeFences(finalMarkdown);
+        const contentJSON = markdownToTipTap(cleanMarkdown);
+
         // Update the note to FINAL status with selected content
         const updatedNote = await prisma.note.update({
             where: { id },
             data: {
                 title: selectedTitle,
-                contentText: finalMarkdown,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                contentJSON: contentJSON as any, // TipTap-compatible JSON for editor
+                contentText: cleanMarkdown, // Plain markdown for search/display
                 status: NoteStatus.FINAL,
                 // Clear raw text if not retaining
                 rawText: retainRaw ? note.rawText : null,

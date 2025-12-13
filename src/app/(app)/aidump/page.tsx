@@ -24,6 +24,10 @@ import {
     X,
     Image,
     File,
+    Users,
+    BookOpen,
+    Lightbulb,
+    GraduationCap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -47,7 +51,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { AIDumpOptions } from "@/lib/validations/ai-dump";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 
 // ============================================================================
 // Default Options
@@ -291,13 +295,61 @@ export default function AIDumpPage() {
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="auto">🎯 Auto-detect</SelectItem>
-                                    <SelectItem value="meeting">📋 Meeting Notes</SelectItem>
-                                    <SelectItem value="research">🔬 Research</SelectItem>
-                                    <SelectItem value="code">💻 Code/Technical</SelectItem>
-                                    <SelectItem value="lecture">📚 Lecture Notes</SelectItem>
+                                    <SelectItem value="auto">
+                                        <span className="flex items-center gap-2">
+                                            <Sparkles className="h-3.5 w-3.5 text-primary" />
+                                            Auto-detect
+                                        </span>
+                                    </SelectItem>
+                                    <SelectItem value="meeting">
+                                        <span className="flex items-center gap-2">
+                                            <Users className="h-3.5 w-3.5 text-blue-500" />
+                                            Meeting Notes
+                                        </span>
+                                    </SelectItem>
+                                    <SelectItem value="research">
+                                        <span className="flex items-center gap-2">
+                                            <BookOpen className="h-3.5 w-3.5 text-green-500" />
+                                            Research Notes
+                                        </span>
+                                    </SelectItem>
+                                    <SelectItem value="code-review">
+                                        <span className="flex items-center gap-2">
+                                            <FileCode className="h-3.5 w-3.5 text-orange-500" />
+                                            Code Review
+                                        </span>
+                                    </SelectItem>
+                                    <SelectItem value="brainstorm">
+                                        <span className="flex items-center gap-2">
+                                            <Lightbulb className="h-3.5 w-3.5 text-yellow-500" />
+                                            Brainstorm
+                                        </span>
+                                    </SelectItem>
+                                    <SelectItem value="lecture">
+                                        <span className="flex items-center gap-2">
+                                            <GraduationCap className="h-3.5 w-3.5 text-purple-500" />
+                                            Lecture Notes
+                                        </span>
+                                    </SelectItem>
+                                    <SelectItem value="article">
+                                        <span className="flex items-center gap-2">
+                                            <FileText className="h-3.5 w-3.5 text-cyan-500" />
+                                            Article Summary
+                                        </span>
+                                    </SelectItem>
                                 </SelectContent>
                             </Select>
+                            {/* Template description */}
+                            <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
+                                {options.template === "auto" && "AI will analyze content and choose the best format."}
+                                {options.template === "meeting" && "Extracts attendees, decisions, and action items."}
+                                {options.template === "research" && "Organizes findings with sources and methodology."}
+                                {options.template === "code-review" && "Documents issues, suggestions, and good patterns."}
+                                {options.template === "brainstorm" && "Groups ideas by theme and highlights top concepts."}
+                                {options.template === "lecture" && "Formats with objectives, concepts, and summary."}
+                                {options.template === "article" && "Summarizes with key points and takeaways."}
+                                {options.template === "code" && "Documents code with explanations and examples."}
+                            </p>
                         </div>
 
                         <Separator />
@@ -744,9 +796,10 @@ export default function AIDumpPage() {
                                                 ))}
                                             </div>
                                         )}
-                                        <div className="prose prose-sm dark:prose-invert max-w-none">
-                                            <ReactMarkdown>{aiDump!.markdown}</ReactMarkdown>
-                                        </div>
+                                        <MarkdownContent
+                                            content={aiDump!.markdown || ""}
+                                            isStreaming={isProcessing}
+                                        />
                                     </div>
                                 ) : isProcessing ? (
                                     <div className="p-4 space-y-4">

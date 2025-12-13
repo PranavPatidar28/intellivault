@@ -136,12 +136,33 @@ You excel at:
 - Add usage examples
 - List dependencies and requirements
 - Include troubleshooting tips if relevant`,
+                "code-review": `Structure as code review notes:
+- Summarize what the code/change does
+- List files or components affected
+- Document issues found (bugs, security, performance)
+- Suggest improvements with code examples
+- Note positive aspects (good patterns, clean code)
+Use headers: ## Overview, ## Changes, ## Issues, ## Suggestions, ## Positive Notes`,
+                brainstorm: `Structure as brainstorming session:
+- Group related ideas together by theme
+- Preserve all ideas - don't filter out anything
+- Highlight the most promising concepts with ⭐
+- Connect ideas that build on each other
+- Add a prioritization section
+Use headers: ## Main Themes, ## Ideas by Category, ## Top Concepts, ## Connections`,
                 lecture: `Structure as study notes:
 - Start with topic and learning objectives
 - Define key terms and concepts
 - Use examples to illustrate abstract ideas
 - Include diagrams descriptions if mentioned
 - End with a summary and key takeaways`,
+                article: `Structure as article summary:
+- Lead with the main thesis or argument
+- Extract key points in order of importance
+- Note the author's perspective if evident
+- Preserve important quotes with attribution
+- End with actionable takeaways
+Use headers: ## Main Thesis, ## Key Points, ## Notable Quotes, ## Takeaways`,
             };
 
             return `Transform this raw content into a polished, well-structured Markdown document.

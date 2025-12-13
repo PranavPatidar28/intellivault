@@ -9,7 +9,10 @@ export const aiDumpTemplateSchema = z.enum([
     "meeting",
     "research",
     "code",
+    "code-review",
+    "brainstorm",
     "lecture",
+    "article",
 ]);
 
 export const aiDumpToneSchema = z.enum([

@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Home, Inbox, Search, Settings, FolderOpen } from "lucide-react";
+import { Home, Inbox, Search, Settings, FolderOpen, Sparkles, Tag } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -20,7 +20,6 @@ import {
 import { Separator } from "./ui/separator";
 import { NavUser } from "./NavUser";
 import { AuthenticatedSession } from "@/lib/session";
-import { Tag } from "lucide-react";
 
 // Menu items.
 const items = [
@@ -28,6 +27,11 @@ const items = [
     title: "Dashboard",
     url: "/dashboard",
     icon: Home,
+  },
+  {
+    title: "AI Dump",
+    url: "/aidump",
+    icon: Sparkles,
   },
   {
     title: "Notes",
