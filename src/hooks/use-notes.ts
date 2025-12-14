@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Note } from '@/types/note';
 
 interface UseNotesResult {
@@ -6,6 +6,7 @@ interface UseNotesResult {
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  optimisticTogglePin: (id: string) => void;
 }
 
 
@@ -46,6 +47,31 @@ export function useNotes(): UseNotesResult {
     setIsLoading(false);
   };
 
+  // Optimistic update for pin toggle - updates UI instantly
+  const optimisticTogglePin = useCallback((id: string) => {
+    setNotes(prevNotes => {
+      const updatedNotes = prevNotes.map(note =>
+        note.id === id
+          ? { ...note, isPinned: !note.isPinned, pinnedAt: !note.isPinned ? new Date().toISOString() : null }
+          : note
+      );
+
+      // Sort: pinned first, then by pinnedAt desc, then by updatedAt desc
+      return updatedNotes.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        if (a.isPinned && b.isPinned) {
+          const aTime = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+          const bTime = b.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+          return bTime - aTime;
+        }
+        const aUpdated = new Date(a.updatedAt).getTime();
+        const bUpdated = new Date(b.updatedAt).getTime();
+        return bUpdated - aUpdated;
+      });
+    });
+  }, []);
+
   useEffect(() => {
     if (!initialFetchDone.current) {
       initialFetchDone.current = true;
@@ -58,5 +84,6 @@ export function useNotes(): UseNotesResult {
     isLoading,
     error,
     refetch: fetchNotes,
+    optimisticTogglePin,
   };
 }

@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Save, Eye, FileText, GitCompare } from "lucide-react";
 import type { AIDumpData } from "@/hooks/use-ai-dump";
+import { MarkdownRenderer } from "@/components/markdown";
 
 // ============================================================================
 // Types
@@ -126,9 +127,7 @@ function GeneratedPreview({ title, tags, markdown }: GeneratedPreviewProps) {
             )}
 
             {/* Markdown Content */}
-            <div className="prose prose-sm dark:prose-invert max-w-none">
-                <MarkdownRenderer content={markdown} />
-            </div>
+            <MarkdownRenderer content={markdown} variant="prose" />
         </div>
     );
 }
@@ -197,90 +196,3 @@ function DiffPreview({ raw, generated }: DiffPreviewProps) {
     );
 }
 
-// ============================================================================
-// Markdown Renderer (Simple)
-// ============================================================================
-
-interface MarkdownRendererProps {
-    content: string;
-}
-
-function MarkdownRenderer({ content }: MarkdownRendererProps) {
-    // Simple markdown parsing for common elements
-    const lines = content.split("\n");
-
-    return (
-        <div className="space-y-2">
-            {lines.map((line, i) => {
-                // Headers
-                if (line.startsWith("### ")) {
-                    return (
-                        <h3 key={i} className="text-lg font-semibold mt-4">
-                            {line.slice(4)}
-                        </h3>
-                    );
-                }
-                if (line.startsWith("## ")) {
-                    return (
-                        <h2 key={i} className="text-xl font-semibold mt-6">
-                            {line.slice(3)}
-                        </h2>
-                    );
-                }
-                if (line.startsWith("# ")) {
-                    return (
-                        <h1 key={i} className="text-2xl font-bold mt-6">
-                            {line.slice(2)}
-                        </h1>
-                    );
-                }
-
-                // Bullet points
-                if (line.startsWith("- ") || line.startsWith("* ")) {
-                    return (
-                        <li key={i} className="ml-4">
-                            {line.slice(2)}
-                        </li>
-                    );
-                }
-
-                // Checkboxes
-                if (line.startsWith("- [ ] ")) {
-                    return (
-                        <li key={i} className="ml-4 flex items-center gap-2">
-                            <input type="checkbox" disabled className="rounded" />
-                            {line.slice(6)}
-                        </li>
-                    );
-                }
-                if (line.startsWith("- [x] ")) {
-                    return (
-                        <li key={i} className="ml-4 flex items-center gap-2">
-                            <input type="checkbox" checked disabled className="rounded" />
-                            <span className="line-through text-muted-foreground">
-                                {line.slice(6)}
-                            </span>
-                        </li>
-                    );
-                }
-
-                // Code blocks
-                if (line.startsWith("```")) {
-                    return <hr key={i} className="border-muted" />;
-                }
-
-                // Empty lines
-                if (line.trim() === "") {
-                    return <br key={i} />;
-                }
-
-                // Regular paragraphs
-                return (
-                    <p key={i} className="text-sm">
-                        {line}
-                    </p>
-                );
-            })}
-        </div>
-    );
-}

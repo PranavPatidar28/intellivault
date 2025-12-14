@@ -34,6 +34,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-virtual": "^3.13.12",
+    "@tiptap/extension-code-block-lowlight": "^3.13.0",
     "@tiptap/extension-highlight": "^3.10.5",
     "@tiptap/extension-horizontal-rule": "^3.10.5",
     "@tiptap/extension-image": "^3.10.5",
@@ -72,8 +73,10 @@
     "react-syntax-highlighter": "^16.1.0",
     "recharts": "^3.5.1",
     "remark-gfm": "^4.0.1",
+    "shiki": "^3.20.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
+    "tiptap-extension-code-block-shiki": "^1.0.0",
     "unpdf": "^1.4.0",
     "zod": "^4.1.12"
   },

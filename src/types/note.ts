@@ -18,6 +18,9 @@ export interface Note {
   createdAt: string | Date;
   updatedAt: string | Date;
   userId?: string;
+  isPinned?: boolean;
+  pinnedAt?: string | Date | null;
+  attachmentCount?: number;
 }
 
 /**

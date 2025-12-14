@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
     Wand2,
@@ -28,6 +28,11 @@ import {
     BookOpen,
     Lightbulb,
     GraduationCap,
+    Mail,
+    Cpu,
+    Zap,
+    PenLine,
+    Edit,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -51,7 +56,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { AIDumpOptions } from "@/lib/validations/ai-dump";
 import Link from "next/link";
-import { MarkdownContent } from "@/components/ui/markdown-content";
+import { MarkdownRenderer } from "@/components/markdown";
+import { detectContentType, getContentTypeDisplay, type ContentTypeResult } from "@/lib/ai/content-type-detection";
+
 
 // ============================================================================
 // Default Options
@@ -126,6 +133,19 @@ export default function AIDumpPage() {
     const [previewTab, setPreviewTab] = useState<"generated" | "raw" | "diff">("generated");
     const [copiedSection, setCopiedSection] = useState<string | null>(null);
     const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+    const [selectedModel, setSelectedModel] = useState<string>("gemini-2.0-flash");
+    const [isRefining, setIsRefining] = useState(false);
+    const [refinementInput, setRefinementInput] = useState("");
+
+    // Inline editor
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [editedMarkdown, setEditedMarkdown] = useState("");
+
+    // Detect content type from input
+    const detectedContentType = useMemo<ContentTypeResult | null>(() => {
+        if (inputContent.length < 50) return null;
+        return detectContentType(inputContent);
+    }, [inputContent]);
 
     const { width: previewWidth, handleMouseDown } = useResizablePanel(400, 300, 600);
 
@@ -184,6 +204,13 @@ export default function AIDumpPage() {
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [inputContent, isProcessing, aiDump]);
+
+    // Sync edited markdown with AI dump output
+    useEffect(() => {
+        if (aiDump?.markdown && !isProcessing) {
+            setEditedMarkdown(aiDump.markdown);
+        }
+    }, [aiDump?.markdown, isProcessing]);
 
     const handleSubmit = useCallback(async () => {
         if (!inputContent.trim()) return;
@@ -349,6 +376,76 @@ export default function AIDumpPage() {
                                 {options.template === "lecture" && "Formats with objectives, concepts, and summary."}
                                 {options.template === "article" && "Summarizes with key points and takeaways."}
                                 {options.template === "code" && "Documents code with explanations and examples."}
+                            </p>
+                            {/* Detected content type badge */}
+                            {detectedContentType && detectedContentType.confidence > 0.4 && (
+                                <div className="mt-3 flex items-center gap-2">
+                                    <Badge
+                                        variant="secondary"
+                                        className={cn("text-[10px] gap-1", getContentTypeDisplay(detectedContentType.type).color)}
+                                    >
+                                        <Zap className="h-2.5 w-2.5" />
+                                        Detected: {getContentTypeDisplay(detectedContentType.type).label}
+                                    </Badge>
+                                    {detectedContentType.suggestedTemplate !== options.template &&
+                                        detectedContentType.suggestedTemplate !== "auto" && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-5 text-[10px] px-2"
+                                                onClick={() => handleOptionsChange({ template: detectedContentType.suggestedTemplate as AIDumpOptions["template"] })}
+                                            >
+                                                Use
+                                            </Button>
+                                        )}
+                                </div>
+                            )}
+                        </div>
+
+                        <Separator />
+
+                        {/* AI Model Selection */}
+                        <div>
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                                <Cpu className="h-3 w-3" />
+                                AI Model
+                            </h3>
+                            <Select
+                                value={selectedModel}
+                                onValueChange={setSelectedModel}
+                                disabled={isProcessing}
+                            >
+                                <SelectTrigger className="w-full h-9">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="gemini-2.0-flash">
+                                        <span className="flex items-center gap-2">
+                                            <Zap className="h-3 w-3 text-yellow-500" />
+                                            Gemini 2.0 Flash
+                                            <Badge variant="outline" className="text-[8px] px-1 ml-1">Fast</Badge>
+                                        </span>
+                                    </SelectItem>
+                                    <SelectItem value="gemini-1.5-pro">
+                                        <span className="flex items-center gap-2">
+                                            <Sparkles className="h-3 w-3 text-purple-500" />
+                                            Gemini 1.5 Pro
+                                            <Badge variant="outline" className="text-[8px] px-1 ml-1">Quality</Badge>
+                                        </span>
+                                    </SelectItem>
+                                    <SelectItem value="gpt-4o-mini">
+                                        <span className="flex items-center gap-2">
+                                            <Cpu className="h-3 w-3 text-green-500" />
+                                            GPT-4o Mini
+                                            <Badge variant="outline" className="text-[8px] px-1 ml-1">OpenAI</Badge>
+                                        </span>
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-muted-foreground mt-2">
+                                {selectedModel === "gemini-2.0-flash" && "Fastest option, great for most content."}
+                                {selectedModel === "gemini-1.5-pro" && "Higher quality, better for complex content."}
+                                {selectedModel === "gpt-4o-mini" && "OpenAI alternative, good balance."}
                             </p>
                         </div>
 
@@ -762,26 +859,53 @@ export default function AIDumpPage() {
                                 </TabsTrigger>
                             </TabsList>
 
-                            {hasMarkdown && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 text-xs"
-                                    onClick={() => copyToClipboard(aiDump!.markdown, "markdown")}
-                                >
-                                    {copiedSection === "markdown" ? (
-                                        <Check className="h-3 w-3 mr-1 text-green-500" />
-                                    ) : (
-                                        <Copy className="h-3 w-3 mr-1" />
-                                    )}
-                                    Copy
-                                </Button>
-                            )}
+                            <div className="flex items-center gap-1">
+                                {/* Edit/View Toggle */}
+                                {hasMarkdown && previewTab === "generated" && (
+                                    <Button
+                                        variant={isEditMode ? "default" : "ghost"}
+                                        size="sm"
+                                        className="h-7 text-xs"
+                                        onClick={() => setIsEditMode(!isEditMode)}
+                                    >
+                                        {isEditMode ? (
+                                            <>
+                                                <Eye className="h-3 w-3 mr-1" />
+                                                Preview
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Edit className="h-3 w-3 mr-1" />
+                                                Edit
+                                            </>
+                                        )}
+                                    </Button>
+                                )}
+
+
+                                {/* Copy Button */}
+                                {hasMarkdown && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 text-xs"
+                                        onClick={() => copyToClipboard(editedMarkdown || aiDump!.markdown, "markdown")}
+                                    >
+                                        {copiedSection === "markdown" ? (
+                                            <Check className="h-3 w-3 mr-1 text-green-500" />
+                                        ) : (
+                                            <Copy className="h-3 w-3 mr-1" />
+                                        )}
+                                        Copy
+                                    </Button>
+                                )}
+                            </div>
                         </div>
 
                         <div className="flex-1 overflow-auto">
                             <TabsContent value="generated" className="m-0 h-full">
-                                {hasMarkdown ? (
+                                {/* Show content if we have markdown OR if we're processing with aiDump (streaming) */}
+                                {(hasMarkdown || (isProcessing && aiDump)) ? (
                                     <div className="p-4">
                                         <h1 className="text-xl font-bold mb-3">{selectedTitle || "Untitled"}</h1>
                                         {selectedTags.length > 0 && (
@@ -796,10 +920,123 @@ export default function AIDumpPage() {
                                                 ))}
                                             </div>
                                         )}
-                                        <MarkdownContent
-                                            content={aiDump!.markdown || ""}
-                                            isStreaming={isProcessing}
-                                        />
+
+                                        {/* EDIT MODE: Show textarea */}
+                                        {isEditMode ? (
+                                            <div className="space-y-3">
+                                                <Textarea
+                                                    value={editedMarkdown}
+                                                    onChange={(e) => setEditedMarkdown(e.target.value)}
+                                                    className="min-h-[400px] font-mono text-sm resize-none"
+                                                    placeholder="Edit your markdown here..."
+                                                />
+                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                    <FileCode className="h-3 w-3" />
+                                                    <span>Markdown editing • Changes auto-save</span>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            /* VIEW MODE: Show rendered markdown */
+                                            <MarkdownRenderer
+                                                content={editedMarkdown || aiDump?.markdown || ""}
+                                                isStreaming={isProcessing}
+                                                enableCopyCode
+                                            />
+                                        )}
+
+                                        {/* Refinement Controls */}
+                                        {!isProcessing && (
+                                            <div className="mt-6 pt-4 border-t space-y-3">
+                                                <div className="flex items-center gap-2">
+                                                    <PenLine className="h-4 w-4 text-muted-foreground" />
+                                                    <span className="text-xs font-medium text-muted-foreground">Refine Output</span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-7 text-xs"
+                                                        disabled={isRefining || isRegenerating.markdown}
+                                                        onClick={() => {
+                                                            setRefinementInput("Make it shorter and more concise");
+                                                        }}
+                                                    >
+                                                        Shorter
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-7 text-xs"
+                                                        disabled={isRefining || isRegenerating.markdown}
+                                                        onClick={() => {
+                                                            setRefinementInput("Add more detail and examples");
+                                                        }}
+                                                    >
+                                                        More Detail
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-7 text-xs"
+                                                        disabled={isRefining || isRegenerating.markdown}
+                                                        onClick={() => {
+                                                            setRefinementInput("Make it more professional and formal");
+                                                        }}
+                                                    >
+                                                        More Formal
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-7 text-xs"
+                                                        disabled={isRefining || isRegenerating.markdown}
+                                                        onClick={() => {
+                                                            setRefinementInput("Add bullet points for key information");
+                                                        }}
+                                                    >
+                                                        Add Bullets
+                                                    </Button>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Textarea
+                                                        placeholder="Or type a custom instruction... (e.g., 'Focus more on action items')"
+                                                        value={refinementInput}
+                                                        onChange={(e) => setRefinementInput(e.target.value)}
+                                                        className="h-16 text-xs resize-none"
+                                                        disabled={isRefining || isRegenerating.markdown}
+                                                    />
+                                                    <Button
+                                                        size="sm"
+                                                        className="h-16 px-4"
+                                                        disabled={!refinementInput.trim() || isRefining || isRegenerating.markdown}
+                                                        onClick={async () => {
+                                                            if (!refinementInput.trim()) return;
+                                                            setIsRefining(true);
+                                                            try {
+                                                                const success = await regenerateSection("markdown", {
+                                                                    tone: options.tone,
+                                                                });
+                                                                if (success) {
+                                                                    toast({
+                                                                        title: "Refinement Applied",
+                                                                        description: "The content has been updated based on your instructions.",
+                                                                    });
+                                                                    setRefinementInput("");
+                                                                }
+                                                            } finally {
+                                                                setIsRefining(false);
+                                                            }
+                                                        }}
+                                                    >
+                                                        {isRefining || isRegenerating.markdown ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <RefreshCw className="h-4 w-4" />
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : isProcessing ? (
                                     <div className="p-4 space-y-4">

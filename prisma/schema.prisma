@@ -91,6 +91,10 @@ model Note {
   aiProcessedAt DateTime? @db.Timestamptz(6)
   contentHash   String? // For change detection
 
+  // User preferences
+  isPinned Boolean   @default(false)
+  pinnedAt DateTime? @db.Timestamptz(6)
+
   userId      String
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   tags        Tag[]

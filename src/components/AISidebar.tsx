@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { useSummarize, useAutoTag, type TagSuggestion, type SummarizeOptions } from "@/hooks/use-ai-features";
 import { useRelatedNotes } from "@/hooks/use-related-notes";
 import type { Tag } from "@/components/TagInput";
+import { MarkdownRenderer } from "@/components/markdown";
 
 // ============================================================================
 // Types
@@ -51,7 +52,7 @@ type SummaryLength = "short" | "medium" | "long";
 type SummaryStyle = "bullet" | "paragraph" | "tldr";
 
 // ============================================================================
-// Summary Content Component with Markdown-like Rendering
+// Summary Content Component using MarkdownRenderer
 // ============================================================================
 
 interface SummaryContentProps {
@@ -68,86 +69,15 @@ function SummaryContent({ content, isStreaming }: SummaryContentProps) {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    // Parse markdown-like syntax into JSX
-    const renderContent = () => {
-        const lines = content.split("\n");
-        const elements: React.ReactNode[] = [];
-        let listItems: string[] = [];
-        let listType: "ul" | "ol" | null = null;
-        let listCount = 0;
-
-        const flushList = () => {
-            if (listItems.length > 0 && listType) {
-                const ListTag = listType;
-                const currentListKey = `list-${listCount++}`;
-                elements.push(
-                    <ListTag key={currentListKey} className={listType === "ul" ? "list-disc pl-4 space-y-1" : "list-decimal pl-4 space-y-1"}>
-                        {listItems.map((item, i) => (
-                            <li key={`${currentListKey}-item-${i}`}>{formatInline(item)}</li>
-                        ))}
-                    </ListTag>
-                );
-                listItems = [];
-                listType = null;
-            }
-        };
-
-        // Format inline text (bold, italic)
-        const formatInline = (text: string): React.ReactNode => {
-            // Handle **bold** and *italic*
-            const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
-            return parts.map((part, i) => {
-                if (part.startsWith("**") && part.endsWith("**")) {
-                    return <strong key={`bold-${i}`}>{part.slice(2, -2)}</strong>;
-                }
-                if (part.startsWith("*") && part.endsWith("*")) {
-                    return <em key={`italic-${i}`}>{part.slice(1, -1)}</em>;
-                }
-                return part;
-            });
-        };
-
-        lines.forEach((line, index) => {
-            const trimmed = line.trim();
-
-            // Bullet points: - or •
-            if (/^[-•]\s+/.test(trimmed)) {
-                if (listType !== "ul") flushList();
-                listType = "ul";
-                listItems.push(trimmed.replace(/^[-•]\s+/, ""));
-                return;
-            }
-
-            // Numbered lists: 1. 2. etc
-            if (/^\d+\.\s+/.test(trimmed)) {
-                if (listType !== "ol") flushList();
-                listType = "ol";
-                listItems.push(trimmed.replace(/^\d+\.\s+/, ""));
-                return;
-            }
-
-            // Regular paragraph
-            flushList();
-            if (trimmed) {
-                elements.push(
-                    <p key={`para-${index}`} className="mb-2 last:mb-0">
-                        {formatInline(trimmed)}
-                    </p>
-                );
-            }
-        });
-
-        flushList();
-        return elements;
-    };
-
     return (
         <div className="relative group">
-            <div className="bg-background rounded-lg p-3 border text-xs leading-relaxed max-h-[350px] overflow-y-auto prose prose-sm dark:prose-invert prose-p:my-1 prose-li:my-0">
-                {renderContent()}
-                {isStreaming && (
-                    <span className="inline-block w-1.5 h-4 bg-primary animate-pulse ml-0.5 align-middle" />
-                )}
+            <div className="bg-background rounded-lg p-3 border max-h-[350px] overflow-y-auto">
+                <MarkdownRenderer
+                    content={content}
+                    isStreaming={isStreaming}
+                    variant="compact"
+                    enableCopyCode={false}
+                />
             </div>
             <button
                 onClick={handleCopy}

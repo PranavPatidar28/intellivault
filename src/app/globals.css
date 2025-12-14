@@ -124,6 +124,28 @@
   }
 }
 
+/* Custom xs breakpoint for very small screens */
+@media (min-width: 480px) {
+  .xs\:flex {
+    display: flex;
+  }
+
+  .xs\:hidden {
+    display: none;
+  }
+}
+
+/* Note card specific animations */
+.note-card-enter {
+  animation: fadeIn 0.3s ease-out, zoomIn 0.3s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-card-enter {
+    animation: none;
+  }
+}
+
 /* Custom prose styles for markdown rendering */
 .prose {
   color: var(--foreground);

@@ -20,7 +20,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const NotesArea = ({ notes, onDelete }: { notes: Note[]; onDelete: (id: string) => void }) => {
+const NotesArea = ({ notes, onDelete, onPin }: {
+  notes: Note[];
+  onDelete: (id: string) => void;
+  onPin: (id: string, isPinned: boolean) => void;
+}) => {
   if (notes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center min-h-[400px]">
@@ -37,7 +41,7 @@ const NotesArea = ({ notes, onDelete }: { notes: Note[]; onDelete: (id: string) 
 
   return (
     <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {notes.map(({ id, title, contentText, summary, createdAt, tags }) => (
+      {notes.map(({ id, title, contentText, summary, createdAt, updatedAt, isPinned, attachmentCount, tags }) => (
         <NotesCard
           key={id}
           title={title}
@@ -48,9 +52,13 @@ const NotesArea = ({ notes, onDelete }: { notes: Note[]; onDelete: (id: string) 
           }
           summary={summary}
           createdAt={new Date(createdAt)}
+          updatedAt={updatedAt ? new Date(updatedAt) : undefined}
           id={id}
           tags={tags}
+          isPinned={isPinned}
+          attachmentCount={attachmentCount}
           onDelete={onDelete}
+          onPin={onPin}
         />
       ))}
     </div>
@@ -60,7 +68,7 @@ const NotesArea = ({ notes, onDelete }: { notes: Note[]; onDelete: (id: string) 
 export default function NotesPage() {
   const [isAddNoteModalOpen, setIsAddNoteModalOpen] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
-  const { notes, isLoading, error, refetch } = useNotes();
+  const { notes, isLoading, error, refetch, optimisticTogglePin } = useNotes();
   const { toast } = useToast();
 
   const handleDeleteRequest = (id: string) => {
@@ -95,6 +103,38 @@ export default function NotesPage() {
     }
   };
 
+  const handlePin = async (id: string, currentlyPinned: boolean) => {
+    // Optimistic update - UI changes instantly
+    optimisticTogglePin(id);
+
+    // Show toast immediately
+    toast({
+      title: currentlyPinned ? "Note unpinned" : "Note pinned",
+      description: currentlyPinned
+        ? "Note removed from pinned section."
+        : "Note will now appear at the top.",
+    });
+
+    // API call in background - revert if fails
+    try {
+      const response = await fetch(`/api/notes/${id}/pin`, {
+        method: "PATCH",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update pin status");
+      }
+    } catch {
+      // Revert the optimistic update
+      optimisticTogglePin(id);
+      toast({
+        title: "Error",
+        description: "Failed to update pin status. Reverted change.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Keyboard shortcut (Ctrl/Cmd + N for new note)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -109,8 +149,8 @@ export default function NotesPage() {
   }, []);
 
   return (
-    <div className="">
-      <Topbar>
+    <div className="h-full flex flex-col">
+      <Topbar className="flex-shrink-0">
         <div className="flex items-center gap-6 flex-1">
           <div className="p-2 text-lg font-semibold min-w-fit">Notes</div>
           <div className="w-full max-w-xl">
@@ -134,29 +174,32 @@ export default function NotesPage() {
         />
       )}
 
-      {/* Loading State */}
-      {isLoading && <NoteListSkeleton />}
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Loading State */}
+        {isLoading && <NoteListSkeleton />}
 
-      {/* Error State */}
-      {!isLoading && error && (
-        <div className="p-4">
-          <div className="flex flex-col items-center justify-center p-8 bg-destructive/10 rounded-lg border border-destructive/20">
-            <AlertCircleIcon size={48} className="text-destructive mb-4" />
-            <h3 className="text-lg font-semibold text-destructive mb-2">
-              Failed to load notes
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4 max-w-md text-center">
-              {error}
-            </p>
-            <Button onClick={refetch} variant="outline">
-              Try Again
-            </Button>
+        {/* Error State */}
+        {!isLoading && error && (
+          <div className="p-4">
+            <div className="flex flex-col items-center justify-center p-8 bg-destructive/10 rounded-lg border border-destructive/20">
+              <AlertCircleIcon size={48} className="text-destructive mb-4" />
+              <h3 className="text-lg font-semibold text-destructive mb-2">
+                Failed to load notes
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4 max-w-md text-center">
+                {error}
+              </p>
+              <Button onClick={refetch} variant="outline">
+                Try Again
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Success State */}
-      {!isLoading && !error && <NotesArea notes={notes} onDelete={handleDeleteRequest} />}
+        {/* Success State */}
+        {!isLoading && !error && <NotesArea notes={notes} onDelete={handleDeleteRequest} onPin={handlePin} />}
+      </div>
 
       <Dialog open={!!noteToDelete} onOpenChange={(open) => !open && setNoteToDelete(null)}>
         <DialogContent>

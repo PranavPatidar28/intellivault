@@ -13,6 +13,9 @@ import { Subscript } from "@tiptap/extension-subscript"
 import { Superscript } from "@tiptap/extension-superscript"
 import { Selection } from "@tiptap/extensions"
 
+// --- Shiki for VS Code-quality syntax highlighting ---
+import { CodeBlockShiki } from "tiptap-extension-code-block-shiki"
+
 // --- UI Primitives ---
 import { Button } from "@/components/tiptap-ui-primitive/button"
 import { Spacer } from "@/components/tiptap-ui-primitive/spacer"
@@ -217,14 +220,58 @@ export const SimpleEditor = forwardRef<SimpleEditorRef, SimpleEditorProps>(funct
         "aria-label": "Main content area, start typing to enter text.",
         class: "simple-editor",
       },
+      // Handle Tab key to insert tabs instead of shifting focus
+      handleKeyDown: (view, event) => {
+        if (event.key === "Tab") {
+          const { state, dispatch } = view
+          const { $from } = state.selection
+
+          // Check if we're in a code block
+          const isInCodeBlock = $from.parent.type.name === "codeBlock"
+
+          if (isInCodeBlock) {
+            event.preventDefault()
+
+            if (event.shiftKey) {
+              // Shift+Tab: Remove leading tab/spaces (unindent)
+              const lineStart = $from.start()
+              const textBefore = state.doc.textBetween(lineStart, $from.pos)
+              const match = textBefore.match(/^(\t|  )/)
+              if (match) {
+                const tr = state.tr.delete(lineStart, lineStart + match[1].length)
+                dispatch(tr)
+              }
+            } else {
+              // Tab: Insert a tab character
+              const tr = state.tr.insertText("\t")
+              dispatch(tr)
+            }
+            return true
+          }
+        }
+        return false
+      },
     },
     extensions: [
       StarterKit.configure({
         horizontalRule: false,
+        codeBlock: false, // Disable default, use Shiki instead for VS Code-quality highlighting
         link: {
           openOnClick: false,
           enableClickSelection: true,
         },
+      }),
+      // Shiki-based syntax highlighting (VS Code quality)
+      CodeBlockShiki.configure({
+        defaultTheme: "github-dark",
+        defaultLanguage: "typescript", // Default for code blocks without specified language
+        themes: {
+          light: "github-light",
+          dark: "github-dark",
+        },
+        // Pass through CodeBlock settings
+        exitOnTripleEnter: true,
+        exitOnArrowDown: true,
       }),
       HorizontalRule,
       TextAlign.configure({ types: ["heading", "paragraph"] }),

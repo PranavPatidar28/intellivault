@@ -37,11 +37,11 @@ export async function POST(request: NextRequest) {
         embeddingStatus: "PENDING", // Explicitly set pending
         tags: {
           connectOrCreate: body.tags?.map((tag) => ({
-            where: { 
-              userId_name: { 
-                userId: session.user.id, 
-                name: tag 
-              } 
+            where: {
+              userId_name: {
+                userId: session.user.id,
+                name: tag
+              }
             },
             create: {
               name: tag,
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     // Trigger embedding in background (fire and forget pattern)
     // We catch errors so we don't block the UI response
     import("@/lib/ai/embedding-sync").then(({ embedNote }) => {
-      embedNote(note.id).catch((err: unknown) => 
+      embedNote(note.id).catch((err: unknown) =>
         console.error(`Failed to auto-embed note ${note.id}:`, err)
       );
     });
@@ -115,9 +115,11 @@ export async function GET(request: NextRequest) {
         where: {
           userId: session.user.id,
         },
-        orderBy: {
-          updatedAt: "desc",
-        },
+        orderBy: [
+          { isPinned: "desc" }, // Pinned notes first
+          { pinnedAt: "desc" }, // Then by pin date
+          { updatedAt: "desc" }, // Then by update date
+        ],
         skip,
         take: query.limit,
         select: {
@@ -125,9 +127,15 @@ export async function GET(request: NextRequest) {
           title: true,
           contentJSON: true,
           contentText: true,
+          summary: true,
+          isPinned: true,
+          pinnedAt: true,
           tags: true,
           createdAt: true,
           updatedAt: true,
+          _count: {
+            select: { attachments: true }
+          }
         },
       }),
       prisma.note.count({
@@ -137,9 +145,16 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    // Map to include attachmentCount
+    const notesWithAttachmentCount = notes.map(note => ({
+      ...note,
+      attachmentCount: note._count.attachments,
+      _count: undefined,
+    }));
+
     return NextResponse.json({
       success: true,
-      notes,
+      notes: notesWithAttachmentCount,
       metadata: {
         total,
         page: query.page,
