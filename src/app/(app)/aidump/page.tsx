@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
     Wand2,
@@ -77,6 +77,7 @@ const DEFAULT_OPTIONS: AIDumpOptions = {
     temperature: 0.2,
 };
 
+
 // ============================================================================
 // Resizable Panel Hook
 // ============================================================================
@@ -98,8 +99,8 @@ function useResizablePanel(initialWidth: number, minWidth: number, maxWidth: num
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (!isResizing.current) return;
-            const delta = e.clientX - startX.current;
-            const newWidth = Math.min(maxWidth, Math.max(minWidth, startWidth.current - delta));
+            const delta = startX.current - e.clientX;
+            const newWidth = Math.min(maxWidth, Math.max(minWidth, startWidth.current + delta));
             setWidth(newWidth);
         };
 
@@ -141,13 +142,23 @@ export default function AIDumpPage() {
     const [isEditMode, setIsEditMode] = useState(false);
     const [editedMarkdown, setEditedMarkdown] = useState("");
 
-    // Detect content type from input
     const detectedContentType = useMemo<ContentTypeResult | null>(() => {
         if (inputContent.length < 50) return null;
         return detectContentType(inputContent);
     }, [inputContent]);
 
-    const { width: previewWidth, handleMouseDown } = useResizablePanel(400, 300, 600);
+    // Collapsible state for right sidebar sections
+    const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+        tldr: false,
+        summary: false,
+    });
+
+    const toggleSectionCollapse = useCallback((section: string) => {
+        setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }));
+    }, []);
+
+    // Resizable right sidebar
+    const { width: rightPanelWidth, handleMouseDown: handleRightPanelResize } = useResizablePanel(280, 220, 400);
 
     const {
         aiDump,
@@ -266,7 +277,7 @@ export default function AIDumpPage() {
     return (
         <div className="flex flex-col h-full bg-background">
             {/* Header */}
-            <header className="flex items-center justify-between px-6 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
+            <header className="flex items-center justify-between px-6 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
                 <div className="flex items-center gap-4">
                     <Link href="/dashboard">
                         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -304,10 +315,10 @@ export default function AIDumpPage() {
                 </div>
             </header>
 
-            {/* Main Content - 3 Column Layout with Resizable Preview */}
+            {/* Main Content - 3 Column Layout: Options | Preview | Metadata */}
             <div className="flex-1 flex min-h-0">
                 {/* Left Panel - Options */}
-                <aside className="w-[260px] flex-shrink-0 border-r overflow-auto bg-muted/20">
+                <aside className="w-[240px] flex-shrink-0 border-r overflow-auto bg-muted/20">
                     <div className="p-4 space-y-5">
                         <div>
                             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
@@ -538,9 +549,8 @@ export default function AIDumpPage() {
                         </div>
                     </div>
                 </aside>
-
-                {/* Center Panel - Input & Results */}
-                <main className="flex-1 overflow-auto flex flex-col bg-background min-w-0">
+                {/* Center Panel - Preview (Primary Focus) */}
+                <main className="flex-1 overflow-auto flex flex-col bg-background min-w-0 border-r">
                     {!aiDump && !isProcessing ? (
                         // Input State
                         <div className="flex-1 flex flex-col p-6">
@@ -675,44 +685,304 @@ export default function AIDumpPage() {
                             </div>
                         </div>
                     ) : (
-                        // Results State (with loading skeletons)
-                        <div className="flex-1 overflow-auto p-6 space-y-4">
-                            {/* TL;DR Card */}
-                            <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent overflow-hidden">
-                                <CardContent className="px-4">
-                                    <div className="flex items-start gap-3">
-                                        <Sparkles className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="text-xs font-semibold uppercase tracking-wider text-primary mb-1.5">
-                                                TL;DR
-                                            </h4>
+                        // Preview State - Main Content Area (CENTER)
+                        <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as typeof previewTab)} className="flex flex-col h-full">
+                            <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+                                <TabsList className="bg-transparent h-8">
+                                    <TabsTrigger value="generated" className="text-xs h-7 px-3 data-[state=active]:bg-background">
+                                        <Eye className="h-3 w-3 mr-1.5" />
+                                        Preview
+                                    </TabsTrigger>
+                                    <TabsTrigger value="raw" className="text-xs h-7 px-3 data-[state=active]:bg-background">
+                                        <FileText className="h-3 w-3 mr-1.5" />
+                                        Raw
+                                    </TabsTrigger>
+                                    <TabsTrigger value="diff" className="text-xs h-7 px-3 data-[state=active]:bg-background">
+                                        <GitCompare className="h-3 w-3 mr-1.5" />
+                                        Diff
+                                    </TabsTrigger>
+                                </TabsList>
+
+                                <div className="flex items-center gap-1">
+                                    {/* Edit/View Toggle */}
+                                    {hasMarkdown && previewTab === "generated" && (
+                                        <Button
+                                            variant={isEditMode ? "default" : "ghost"}
+                                            size="sm"
+                                            className="h-7 text-xs"
+                                            onClick={() => setIsEditMode(!isEditMode)}
+                                        >
+                                            {isEditMode ? (
+                                                <>
+                                                    <Eye className="h-3 w-3 mr-1" />
+                                                    Preview
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Edit className="h-3 w-3 mr-1" />
+                                                    Edit
+                                                </>
+                                            )}
+                                        </Button>
+                                    )}
+
+                                    {/* Copy Button */}
+                                    {hasMarkdown && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-xs"
+                                            onClick={() => copyToClipboard(editedMarkdown || aiDump!.markdown, "markdown")}
+                                        >
+                                            {copiedSection === "markdown" ? (
+                                                <Check className="h-3 w-3 mr-1 text-green-500" />
+                                            ) : (
+                                                <Copy className="h-3 w-3 mr-1" />
+                                            )}
+                                            Copy
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex-1 overflow-auto">
+                                <TabsContent value="generated" className="m-0 h-full">
+                                    {(hasMarkdown || (isProcessing && aiDump)) ? (
+                                        <div className="p-6">
+                                            <h1 className="text-2xl font-bold mb-3">{selectedTitle || "Untitled"}</h1>
+                                            {selectedTags.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5 mb-4">
+                                                    {selectedTags.map((tag) => (
+                                                        <span
+                                                            key={tag}
+                                                            className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full"
+                                                        >
+                                                            #{tag}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* EDIT MODE: Show textarea */}
+                                            {isEditMode ? (
+                                                <div className="space-y-3">
+                                                    <Textarea
+                                                        value={editedMarkdown}
+                                                        onChange={(e) => setEditedMarkdown(e.target.value)}
+                                                        className="min-h-[400px] font-mono text-sm resize-none"
+                                                        placeholder="Edit your markdown here..."
+                                                    />
+                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                        <FileCode className="h-3 w-3" />
+                                                        <span>Markdown editing • Changes auto-save</span>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                /* VIEW MODE: Show rendered markdown */
+                                                <MarkdownRenderer
+                                                    content={editedMarkdown || aiDump?.markdown || ""}
+                                                    isStreaming={isProcessing}
+                                                    enableCopyCode
+                                                />
+                                            )}
+
+                                            {/* Refinement Controls */}
+                                            {!isProcessing && (
+                                                <div className="mt-6 pt-4 border-t space-y-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <PenLine className="h-4 w-4 text-muted-foreground" />
+                                                        <span className="text-xs font-medium text-muted-foreground">Refine Output</span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-7 text-xs"
+                                                            disabled={isRefining || isRegenerating.markdown}
+                                                            onClick={() => {
+                                                                setRefinementInput("Make it shorter and more concise");
+                                                            }}
+                                                        >
+                                                            Shorter
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-7 text-xs"
+                                                            disabled={isRefining || isRegenerating.markdown}
+                                                            onClick={() => {
+                                                                setRefinementInput("Add more detail and examples");
+                                                            }}
+                                                        >
+                                                            More Detail
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-7 text-xs"
+                                                            disabled={isRefining || isRegenerating.markdown}
+                                                            onClick={() => {
+                                                                setRefinementInput("Make it more professional and formal");
+                                                            }}
+                                                        >
+                                                            More Formal
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-7 text-xs"
+                                                            disabled={isRefining || isRegenerating.markdown}
+                                                            onClick={() => {
+                                                                setRefinementInput("Add bullet points for key information");
+                                                            }}
+                                                        >
+                                                            Add Bullets
+                                                        </Button>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Textarea
+                                                            placeholder="Or type a custom instruction... (e.g., 'Focus more on action items')"
+                                                            value={refinementInput}
+                                                            onChange={(e) => setRefinementInput(e.target.value)}
+                                                            className="h-16 text-xs resize-none"
+                                                            disabled={isRefining || isRegenerating.markdown}
+                                                        />
+                                                        <Button
+                                                            size="sm"
+                                                            className="h-16 px-4"
+                                                            disabled={!refinementInput.trim() || isRefining || isRegenerating.markdown}
+                                                            onClick={async () => {
+                                                                if (!refinementInput.trim()) return;
+                                                                setIsRefining(true);
+                                                                try {
+                                                                    const success = await regenerateSection("markdown", {
+                                                                        tone: options.tone,
+                                                                    });
+                                                                    if (success) {
+                                                                        toast({
+                                                                            title: "Refinement Applied",
+                                                                            description: "The content has been updated based on your instructions.",
+                                                                        });
+                                                                        setRefinementInput("");
+                                                                    }
+                                                                } finally {
+                                                                    setIsRefining(false);
+                                                                }
+                                                            }}
+                                                        >
+                                                            {isRefining || isRegenerating.markdown ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <RefreshCw className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : isProcessing ? (
+                                        <div className="p-6 space-y-4">
+                                            <Skeleton className="h-8 w-3/4" />
+                                            <div className="flex gap-2">
+                                                <Skeleton className="h-5 w-16 rounded-full" />
+                                                <Skeleton className="h-5 w-20 rounded-full" />
+                                            </div>
+                                            <div className="space-y-2 mt-4">
+                                                <Skeleton className="h-4 w-full" />
+                                                <Skeleton className="h-4 w-full" />
+                                                <Skeleton className="h-4 w-2/3" />
+                                                <Skeleton className="h-4 w-full" />
+                                                <Skeleton className="h-4 w-4/5" />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <EmptyState icon={Eye} message="Run AI Dump to see preview" />
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="raw" className="m-0 h-full">
+                                    {inputContent ? (
+                                        <pre className="p-6 text-xs font-mono whitespace-pre-wrap text-muted-foreground">
+                                            {inputContent}
+                                        </pre>
+                                    ) : (
+                                        <EmptyState icon={FileText} message="Paste content to see raw input" />
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="diff" className="m-0 h-full">
+                                    {hasMarkdown ? (
+                                        <div className="p-6 space-y-4">
+                                            <div>
+                                                <Badge variant="outline" className="mb-2 text-xs bg-red-500/10 text-red-600 border-red-200">
+                                                    Original ({inputContent.length} chars)
+                                                </Badge>
+                                                <pre className="text-xs font-mono whitespace-pre-wrap text-muted-foreground max-h-40 overflow-auto bg-muted/50 rounded p-2">
+                                                    {inputContent.slice(0, 500)}{inputContent.length > 500 ? "..." : ""}
+                                                </pre>
+                                            </div>
+                                            <div>
+                                                <Badge variant="outline" className="mb-2 text-xs bg-green-500/10 text-green-600 border-green-200">
+                                                    Generated ({aiDump!.markdown.length} chars)
+                                                </Badge>
+                                                <pre className="text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto bg-muted/50 rounded p-2">
+                                                    {aiDump!.markdown.slice(0, 500)}{aiDump!.markdown.length > 500 ? "..." : ""}
+                                                </pre>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <EmptyState icon={GitCompare} message="Run AI Dump to compare" />
+                                    )}
+                                </TabsContent>
+                            </div>
+                        </Tabs>
+                    )}
+                </main>
+
+                {/* Resize Handle */}
+                <div
+                    className="w-1 bg-border hover:bg-primary/50 cursor-col-resize flex-shrink-0 relative group"
+                    onMouseDown={handleRightPanelResize}
+                >
+                    <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-4 h-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <GripVertical className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                </div>
+
+                {/* Right Panel - Metadata & Actions */}
+                <aside className="flex-shrink-0 overflow-auto bg-muted/10" style={{ width: rightPanelWidth }}>
+                    {(aiDump || isProcessing) ? (
+                        <div className="p-4 space-y-4">
+                            {/* TL;DR Section */}
+                            <div className="space-y-2">
+                                <button
+                                    onClick={() => toggleSectionCollapse("tldr")}
+                                    className="flex items-center justify-between w-full text-left"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles className="h-3.5 w-3.5 text-primary" />
+                                        <span className="text-xs font-semibold uppercase tracking-wider text-primary">TL;DR</span>
+                                    </div>
+                                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", collapsedSections.tldr && "-rotate-90")} />
+                                </button>
+                                {!collapsedSections.tldr && (
+                                    <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+                                        <CardContent className="p-3">
                                             {hasTldr ? (
-                                                <p className="text-sm text-muted-foreground leading-relaxed">
-                                                    {aiDump.tldr}
+                                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                                    {aiDump!.tldr}
                                                 </p>
                                             ) : (
                                                 <Skeleton className="h-4 w-full" />
                                             )}
-                                        </div>
-                                        {hasTldr && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-7 w-7 flex-shrink-0"
-                                                onClick={() => copyToClipboard(aiDump!.tldr, "tldr")}
-                                            >
-                                                {copiedSection === "tldr" ? (
-                                                    <Check className="h-3 w-3 text-green-500" />
-                                                ) : (
-                                                    <Copy className="h-3 w-3" />
-                                                )}
-                                            </Button>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                        </CardContent>
+                                    </Card>
+                                )}
+                            </div>
 
-                            {/* Titles - with loading state */}
+                            <Separator />
+
+                            {/* Choose Title Section */}
                             <ResultSection
                                 title="Choose Title"
                                 icon={<Type className="h-4 w-4" />}
@@ -727,7 +997,7 @@ export default function AIDumpPage() {
                                                 key={idx}
                                                 onClick={() => setSelectedTitle(title.text)}
                                                 className={cn(
-                                                    "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                                                    "w-full flex items-center gap-2 p-2 rounded-lg border text-left transition-all text-xs",
                                                     selectedTitle === title.text
                                                         ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                                                         : "border-muted hover:border-primary/30 hover:bg-muted/50"
@@ -735,35 +1005,37 @@ export default function AIDumpPage() {
                                             >
                                                 <div
                                                     className={cn(
-                                                        "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                                                        "w-3 h-3 rounded-full border-2 flex items-center justify-center flex-shrink-0",
                                                         selectedTitle === title.text
                                                             ? "border-primary bg-primary"
                                                             : "border-muted-foreground/30"
                                                     )}
                                                 >
                                                     {selectedTitle === title.text && (
-                                                        <Check className="h-2.5 w-2.5 text-primary-foreground" />
+                                                        <Check className="h-2 w-2 text-primary-foreground" />
                                                     )}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <Badge variant="secondary" className="text-[10px] mb-1 capitalize">
+                                                    <Badge variant="secondary" className="text-[9px] mb-1 capitalize">
                                                         {title.variant}
                                                     </Badge>
-                                                    <p className="text-sm">{title.text}</p>
+                                                    <p className="text-xs leading-snug">{title.text}</p>
                                                 </div>
                                             </button>
                                         ))}
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
-                                        <Skeleton className="h-16 w-full" />
-                                        <Skeleton className="h-16 w-full" />
-                                        <Skeleton className="h-16 w-full" />
+                                        <Skeleton className="h-12 w-full" />
+                                        <Skeleton className="h-12 w-full" />
+                                        <Skeleton className="h-12 w-full" />
                                     </div>
                                 )}
                             </ResultSection>
 
-                            {/* Tags - with loading state */}
+                            <Separator />
+
+                            {/* Select Tags Section */}
                             <ResultSection
                                 title="Select Tags"
                                 icon={<Hash className="h-4 w-4" />}
@@ -772,328 +1044,114 @@ export default function AIDumpPage() {
                                 isLoading={!hasTags && isProcessing}
                             >
                                 {hasTags ? (
-                                    <div className="flex flex-wrap gap-2">
+                                    <div className="flex flex-wrap gap-1.5">
                                         {aiDump!.tags.map((tag) => (
                                             <button
                                                 key={tag.name}
                                                 onClick={() => toggleTag(tag.name)}
                                                 className={cn(
-                                                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all",
+                                                    "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all",
                                                     selectedTags.includes(tag.name)
                                                         ? "bg-primary text-primary-foreground"
                                                         : "bg-muted hover:bg-muted/80 text-muted-foreground"
                                                 )}
                                             >
                                                 {selectedTags.includes(tag.name) ? (
-                                                    <Check className="h-3 w-3" />
+                                                    <Check className="h-2.5 w-2.5" />
                                                 ) : (
-                                                    <span className="w-3 h-3 rounded-full border border-current opacity-40" />
+                                                    <span className="w-2.5 h-2.5 rounded-full border border-current opacity-40" />
                                                 )}
                                                 {tag.name}
                                             </button>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="flex flex-wrap gap-2">
-                                        <Skeleton className="h-8 w-20 rounded-full" />
-                                        <Skeleton className="h-8 w-24 rounded-full" />
-                                        <Skeleton className="h-8 w-16 rounded-full" />
-                                        <Skeleton className="h-8 w-28 rounded-full" />
-                                        <Skeleton className="h-8 w-20 rounded-full" />
+                                    <div className="flex flex-wrap gap-1.5">
+                                        <Skeleton className="h-6 w-16 rounded-full" />
+                                        <Skeleton className="h-6 w-20 rounded-full" />
+                                        <Skeleton className="h-6 w-14 rounded-full" />
+                                        <Skeleton className="h-6 w-18 rounded-full" />
                                     </div>
                                 )}
                             </ResultSection>
 
-                            {/* Summary - with loading state */}
-                            <Card>
-                                <CardContent className="px-6">
-                                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                        Summary
-                                    </h4>
-                                    {hasSummary ? (
-                                        <p className="text-sm text-muted-foreground leading-relaxed">
-                                            {aiDump!.summary}
-                                        </p>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            <Skeleton className="h-4 w-full" />
-                                            <Skeleton className="h-4 w-full" />
-                                            <Skeleton className="h-4 w-3/4" />
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </div>
-                    )}
-                </main>
+                            <Separator />
 
-                {/* Resize Handle */}
-                <div
-                    className="w-1 bg-border hover:bg-primary/50 cursor-col-resize flex-shrink-0 relative group"
-                    onMouseDown={handleMouseDown}
-                >
-                    <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-4 h-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <GripVertical className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                </div>
-
-                {/* Right Panel - Preview (Resizable) */}
-                <aside
-                    className="overflow-hidden flex flex-col bg-muted/10 flex-shrink-0"
-                    style={{ width: previewWidth }}
-                >
-                    <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as typeof previewTab)} className="flex flex-col h-full">
-                        <div className="flex items-center justify-between px-4 py-2 border-b bg-background/50">
-                            <TabsList className="bg-transparent h-8">
-                                <TabsTrigger value="generated" className="text-xs h-7 px-2 data-[state=active]:bg-background">
-                                    <Eye className="h-3 w-3 mr-1" />
-                                    Preview
-                                </TabsTrigger>
-                                <TabsTrigger value="raw" className="text-xs h-7 px-2 data-[state=active]:bg-background">
-                                    <FileText className="h-3 w-3 mr-1" />
-                                    Raw
-                                </TabsTrigger>
-                                <TabsTrigger value="diff" className="text-xs h-7 px-2 data-[state=active]:bg-background">
-                                    <GitCompare className="h-3 w-3 mr-1" />
-                                    Diff
-                                </TabsTrigger>
-                            </TabsList>
-
-                            <div className="flex items-center gap-1">
-                                {/* Edit/View Toggle */}
-                                {hasMarkdown && previewTab === "generated" && (
-                                    <Button
-                                        variant={isEditMode ? "default" : "ghost"}
-                                        size="sm"
-                                        className="h-7 text-xs"
-                                        onClick={() => setIsEditMode(!isEditMode)}
-                                    >
-                                        {isEditMode ? (
-                                            <>
-                                                <Eye className="h-3 w-3 mr-1" />
-                                                Preview
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Edit className="h-3 w-3 mr-1" />
-                                                Edit
-                                            </>
-                                        )}
-                                    </Button>
-                                )}
-
-
-                                {/* Copy Button */}
-                                {hasMarkdown && (
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-7 text-xs"
-                                        onClick={() => copyToClipboard(editedMarkdown || aiDump!.markdown, "markdown")}
-                                    >
-                                        {copiedSection === "markdown" ? (
-                                            <Check className="h-3 w-3 mr-1 text-green-500" />
-                                        ) : (
-                                            <Copy className="h-3 w-3 mr-1" />
-                                        )}
-                                        Copy
-                                    </Button>
+                            {/* Summary Section */}
+                            <div className="space-y-2">
+                                <button
+                                    onClick={() => toggleSectionCollapse("summary")}
+                                    className="flex items-center justify-between w-full text-left"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Summary</span>
+                                    </div>
+                                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", collapsedSections.summary && "-rotate-90")} />
+                                </button>
+                                {!collapsedSections.summary && (
+                                    <Card>
+                                        <CardContent className="p-3">
+                                            {hasSummary ? (
+                                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                                    {aiDump!.summary}
+                                                </p>
+                                            ) : (
+                                                <div className="space-y-1.5">
+                                                    <Skeleton className="h-3 w-full" />
+                                                    <Skeleton className="h-3 w-full" />
+                                                    <Skeleton className="h-3 w-2/3" />
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
                                 )}
                             </div>
-                        </div>
 
-                        <div className="flex-1 overflow-auto">
-                            <TabsContent value="generated" className="m-0 h-full">
-                                {/* Show content if we have markdown OR if we're processing with aiDump (streaming) */}
-                                {(hasMarkdown || (isProcessing && aiDump)) ? (
-                                    <div className="p-4">
-                                        <h1 className="text-xl font-bold mb-3">{selectedTitle || "Untitled"}</h1>
-                                        {selectedTags.length > 0 && (
-                                            <div className="flex flex-wrap gap-1.5 mb-4">
-                                                {selectedTags.map((tag) => (
-                                                    <span
-                                                        key={tag}
-                                                        className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full"
-                                                    >
-                                                        #{tag}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
+                            <Separator />
 
-                                        {/* EDIT MODE: Show textarea */}
-                                        {isEditMode ? (
-                                            <div className="space-y-3">
-                                                <Textarea
-                                                    value={editedMarkdown}
-                                                    onChange={(e) => setEditedMarkdown(e.target.value)}
-                                                    className="min-h-[400px] font-mono text-sm resize-none"
-                                                    placeholder="Edit your markdown here..."
-                                                />
-                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                    <FileCode className="h-3 w-3" />
-                                                    <span>Markdown editing • Changes auto-save</span>
-                                                </div>
-                                            </div>
+                            {/* Quick Actions */}
+                            <div className="space-y-2">
+                                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Quick Actions
+                                </h4>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-xs gap-1"
+                                        onClick={() => {
+                                            const allContent = `# ${selectedTitle}\n\n${selectedTags.map(t => `#${t}`).join(" ")}\n\n${aiDump?.markdown || ""}`;
+                                            copyToClipboard(allContent, "all");
+                                        }}
+                                        disabled={!hasMarkdown}
+                                    >
+                                        {copiedSection === "all" ? (
+                                            <Check className="h-3 w-3 text-green-500" />
                                         ) : (
-                                            /* VIEW MODE: Show rendered markdown */
-                                            <MarkdownRenderer
-                                                content={editedMarkdown || aiDump?.markdown || ""}
-                                                isStreaming={isProcessing}
-                                                enableCopyCode
-                                            />
+                                            <Copy className="h-3 w-3" />
                                         )}
-
-                                        {/* Refinement Controls */}
-                                        {!isProcessing && (
-                                            <div className="mt-6 pt-4 border-t space-y-3">
-                                                <div className="flex items-center gap-2">
-                                                    <PenLine className="h-4 w-4 text-muted-foreground" />
-                                                    <span className="text-xs font-medium text-muted-foreground">Refine Output</span>
-                                                </div>
-                                                <div className="flex flex-wrap gap-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-7 text-xs"
-                                                        disabled={isRefining || isRegenerating.markdown}
-                                                        onClick={() => {
-                                                            setRefinementInput("Make it shorter and more concise");
-                                                        }}
-                                                    >
-                                                        Shorter
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-7 text-xs"
-                                                        disabled={isRefining || isRegenerating.markdown}
-                                                        onClick={() => {
-                                                            setRefinementInput("Add more detail and examples");
-                                                        }}
-                                                    >
-                                                        More Detail
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-7 text-xs"
-                                                        disabled={isRefining || isRegenerating.markdown}
-                                                        onClick={() => {
-                                                            setRefinementInput("Make it more professional and formal");
-                                                        }}
-                                                    >
-                                                        More Formal
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-7 text-xs"
-                                                        disabled={isRefining || isRegenerating.markdown}
-                                                        onClick={() => {
-                                                            setRefinementInput("Add bullet points for key information");
-                                                        }}
-                                                    >
-                                                        Add Bullets
-                                                    </Button>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <Textarea
-                                                        placeholder="Or type a custom instruction... (e.g., 'Focus more on action items')"
-                                                        value={refinementInput}
-                                                        onChange={(e) => setRefinementInput(e.target.value)}
-                                                        className="h-16 text-xs resize-none"
-                                                        disabled={isRefining || isRegenerating.markdown}
-                                                    />
-                                                    <Button
-                                                        size="sm"
-                                                        className="h-16 px-4"
-                                                        disabled={!refinementInput.trim() || isRefining || isRegenerating.markdown}
-                                                        onClick={async () => {
-                                                            if (!refinementInput.trim()) return;
-                                                            setIsRefining(true);
-                                                            try {
-                                                                const success = await regenerateSection("markdown", {
-                                                                    tone: options.tone,
-                                                                });
-                                                                if (success) {
-                                                                    toast({
-                                                                        title: "Refinement Applied",
-                                                                        description: "The content has been updated based on your instructions.",
-                                                                    });
-                                                                    setRefinementInput("");
-                                                                }
-                                                            } finally {
-                                                                setIsRefining(false);
-                                                            }
-                                                        }}
-                                                    >
-                                                        {isRefining || isRegenerating.markdown ? (
-                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                        ) : (
-                                                            <RefreshCw className="h-4 w-4" />
-                                                        )}
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : isProcessing ? (
-                                    <div className="p-4 space-y-4">
-                                        <Skeleton className="h-8 w-3/4" />
-                                        <div className="flex gap-2">
-                                            <Skeleton className="h-5 w-16 rounded-full" />
-                                            <Skeleton className="h-5 w-20 rounded-full" />
-                                        </div>
-                                        <div className="space-y-2 mt-4">
-                                            <Skeleton className="h-4 w-full" />
-                                            <Skeleton className="h-4 w-full" />
-                                            <Skeleton className="h-4 w-2/3" />
-                                            <Skeleton className="h-4 w-full" />
-                                            <Skeleton className="h-4 w-4/5" />
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <EmptyState icon={Eye} message="Run AI Dump to see preview" />
-                                )}
-                            </TabsContent>
-
-                            <TabsContent value="raw" className="m-0 h-full">
-                                {inputContent ? (
-                                    <pre className="p-4 text-xs font-mono whitespace-pre-wrap text-muted-foreground">
-                                        {inputContent}
-                                    </pre>
-                                ) : (
-                                    <EmptyState icon={FileText} message="Paste content to see raw input" />
-                                )}
-                            </TabsContent>
-
-                            <TabsContent value="diff" className="m-0 h-full">
-                                {hasMarkdown ? (
-                                    <div className="p-4 space-y-4">
-                                        <div>
-                                            <Badge variant="outline" className="mb-2 text-xs bg-red-500/10 text-red-600 border-red-200">
-                                                Original ({inputContent.length} chars)
-                                            </Badge>
-                                            <pre className="text-xs font-mono whitespace-pre-wrap text-muted-foreground max-h-40 overflow-auto bg-muted/50 rounded p-2">
-                                                {inputContent.slice(0, 500)}{inputContent.length > 500 ? "..." : ""}
-                                            </pre>
-                                        </div>
-                                        <div>
-                                            <Badge variant="outline" className="mb-2 text-xs bg-green-500/10 text-green-600 border-green-200">
-                                                Generated ({aiDump!.markdown.length} chars)
-                                            </Badge>
-                                            <pre className="text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto bg-muted/50 rounded p-2">
-                                                {aiDump!.markdown.slice(0, 500)}{aiDump!.markdown.length > 500 ? "..." : ""}
-                                            </pre>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <EmptyState icon={GitCompare} message="Run AI Dump to compare" />
-                                )}
-                            </TabsContent>
+                                        Copy All
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-xs gap-1"
+                                        onClick={() => regenerateSection("markdown")}
+                                        disabled={isRegenerating.markdown || !hasMarkdown}
+                                    >
+                                        <RefreshCw className={cn("h-3 w-3", isRegenerating.markdown && "animate-spin")} />
+                                        Regenerate
+                                    </Button>
+                                </div>
+                            </div>
                         </div>
-                    </Tabs>
+                    ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-6">
+                            <Type className="h-10 w-10 mb-3 opacity-20" />
+                            <p className="text-sm text-center">Title, tags, and summary will appear here after processing</p>
+                        </div>
+                    )}
                 </aside>
             </div>
         </div>

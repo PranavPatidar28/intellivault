@@ -24,6 +24,7 @@ import { getRelativeTime } from "@/lib/utils/text";
 import { Tag } from "@/components/TagInput";
 import { NoteTags } from "@/components/NoteTags";
 import { AISidebar } from "@/components/AISidebar";
+import { markdownToTipTap } from "@/lib/utils/markdown-to-tiptap";
 
 export default function NotePage() {
   const params = useParams();
@@ -284,8 +285,8 @@ export default function NotePage() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <Topbar>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={handleGoBack}>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Button variant="ghost" size="icon" onClick={handleGoBack} className="shrink-0">
             <ArrowLeftIcon size={16} />
           </Button>
           <NoteTitle initialTitle={noteTitle} onTitleChange={handleTitleChange} />
@@ -379,7 +380,14 @@ export default function NotePage() {
           <div className="flex-1 overflow-auto">
             <SimpleEditor
               ref={editorRef}
-              initialContent={note.contentJSON}
+              initialContent={
+                // If contentJSON is empty (e.g. from AI Dump), convert contentText markdown to TipTap format
+                note.contentJSON && Object.keys(note.contentJSON).length > 0
+                  ? note.contentJSON
+                  : note.contentText
+                    ? markdownToTipTap(note.contentText)
+                    : undefined
+              }
               onChange={handleEditorChange}
             />
           </div>
