@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { PlusSquareIcon, AlertCircleIcon, LayoutGrid, List, ArrowUpDown, Filter, X, Check } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { useNotes } from "@/hooks/use-notes";
 import { Note } from "@/types/note";
 import { NoteListSkeleton } from "@/components/skeletons/note-skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { usePreferences } from "@/components/PreferencesProvider";
 import {
   Dialog,
   DialogContent,
@@ -145,20 +146,30 @@ export default function NotesPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const { notes, isLoading, error, refetch, optimisticTogglePin } = useNotes();
   const { toast } = useToast();
+  const { preferences } = usePreferences();
+  const hasAppliedPreferences = useRef(false);
 
-  // Load preferences from localStorage
+  // Load preferences - use user preferences as defaults, with localStorage override
   useEffect(() => {
-    const savedViewMode = localStorage.getItem(VIEW_MODE_KEY) as ViewMode | null;
-    const savedSort = localStorage.getItem(SORT_KEY) as SortOption | null;
+    // Apply user preferences only once when they load
+    if (preferences && !hasAppliedPreferences.current) {
+      const savedViewMode = localStorage.getItem(VIEW_MODE_KEY) as ViewMode | null;
+      const savedSort = localStorage.getItem(SORT_KEY) as SortOption | null;
+
+      // Use localStorage if available, otherwise use preferences
+      setViewMode(savedViewMode || (preferences.defaultNoteView as ViewMode) || "grid");
+      setSortBy(savedSort || (preferences.defaultSortOrder as SortOption) || "updatedAt");
+      hasAppliedPreferences.current = true;
+    }
+
+    // Always load filter tags from localStorage
     const savedFilterTags = localStorage.getItem(FILTER_TAGS_KEY);
-    if (savedViewMode) setViewMode(savedViewMode);
-    if (savedSort) setSortBy(savedSort);
     if (savedFilterTags) {
       try {
         setFilterTags(JSON.parse(savedFilterTags));
       } catch { }
     }
-  }, []);
+  }, [preferences]);
 
   // Save preferences to localStorage
   const handleViewModeChange = (value: string) => {

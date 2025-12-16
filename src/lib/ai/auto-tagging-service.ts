@@ -238,10 +238,12 @@ export async function autoTagNote(
 export async function applyTagsToNote(
     noteId: string,
     userId: string,
-    tagNames: string[]
+    tagNames: string[],
+    options: { defaultColor?: string | null } = {}
 ): Promise<{ applied: string[]; created: string[] }> {
     const applied: string[] = [];
     const created: string[] = [];
+    const { defaultColor } = options;
 
     for (const tagName of tagNames) {
         const slug = generateSlug(tagName);
@@ -258,12 +260,13 @@ export async function applyTagsToNote(
         });
 
         if (!tag) {
-            // Create new tag
+            // Create new tag with optional default color from user preferences
             tag = await prisma.tag.create({
                 data: {
                     name: tagName,
                     slug,
                     userId,
+                    color: defaultColor || null,
                 },
             });
             created.push(tagName);

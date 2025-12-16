@@ -25,10 +25,12 @@ import { Tag } from "@/components/TagInput";
 import { NoteTags } from "@/components/NoteTags";
 import { AISidebar } from "@/components/AISidebar";
 import { markdownToTipTap } from "@/lib/utils/markdown-to-tiptap";
+import { usePreferences } from "@/components/PreferencesProvider";
 
 export default function NotePage() {
   const params = useParams();
   const router = useRouter();
+  const { preferences } = usePreferences();
   const [note, setNote] = useState<Note | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -175,16 +177,26 @@ export default function NotePage() {
     setSaveStatus(null);
   };
 
-  // Auto-save with debouncing
+  // Auto-save with debouncing (uses user preferences for interval)
   useEffect(() => {
+    // Get auto-save interval from preferences (default 30 seconds, 0 = disabled)
+    const autoSaveInterval = preferences?.autoSaveInterval ?? 30;
+
+    if (autoSaveInterval === 0) {
+      // Auto-save disabled
+      return;
+    }
+
     if (lastEditTime && hasUnsavedChanges) {
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
       }
 
+      // Use user's preferred interval (minimum 3 seconds for safety)
+      const interval = Math.max(autoSaveInterval * 1000, 3000);
       autoSaveTimerRef.current = setTimeout(() => {
         handleSaveNote(true);
-      }, 3000); // Reduced to 3 seconds for better UX
+      }, interval);
     }
 
     return () => {
@@ -192,7 +204,7 @@ export default function NotePage() {
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [lastEditTime, hasUnsavedChanges, handleSaveNote]);
+  }, [lastEditTime, hasUnsavedChanges, handleSaveNote, preferences?.autoSaveInterval]);
 
   // Keyboard shortcuts
   useEffect(() => {

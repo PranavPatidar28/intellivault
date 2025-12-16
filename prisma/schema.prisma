@@ -50,9 +50,46 @@ model User {
   notes         Note[]
   tags          Tag[]
   attachments   MediaAttachment[]
+  preferences   UserPreferences?
 
   @@unique([email])
   @@map("user")
+}
+
+model UserPreferences {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Appearance
+  theme          String @default("system") // "light" | "dark" | "system"
+  fontSize       String @default("medium") // "small" | "medium" | "large"
+  displayDensity String @default("comfortable") // "compact" | "comfortable" | "spacious"
+
+  // AI Settings
+  defaultLLMProvider String? // Override env default: "ollama" | "gemini" | "openai" | "openrouter"
+  defaultLLMModel    String?
+  aiAutoSummarize    Boolean @default(false)
+  aiAutoTag          Boolean @default(false)
+
+  // Notes & Editor
+  defaultNoteView  String  @default("grid") // "grid" | "list"
+  defaultSortOrder String  @default("updatedAt") // "updatedAt" | "createdAt" | "title"
+  autoSaveInterval Int     @default(30) // seconds, 0 = disabled
+  showWordCount    Boolean @default(true)
+  spellCheck       Boolean @default(true)
+
+  // Tags
+  defaultTagColor      String?
+  enableTagSuggestions Boolean @default(true)
+
+  // Privacy
+  analyticsEnabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_preferences")
 }
 
 model Note {

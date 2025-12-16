@@ -78,6 +78,40 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* User preference variables (set via JS from PreferencesProvider) */
+  --base-font-size: 16px;
+  --content-spacing: 1rem;
+  --content-padding: 1rem;
+}
+
+/* Font size scaling based on user preference */
+html[data-font-size="small"] {
+  font-size: 14px;
+}
+
+html[data-font-size="medium"] {
+  font-size: 16px;
+}
+
+html[data-font-size="large"] {
+  font-size: 18px;
+}
+
+/* Display density variants */
+html[data-density="compact"] {
+  --content-spacing: 0.5rem;
+  --content-padding: 0.5rem;
+}
+
+html[data-density="comfortable"] {
+  --content-spacing: 1rem;
+  --content-padding: 1rem;
+}
+
+html[data-density="spacious"] {
+  --content-spacing: 1.5rem;
+  --content-padding: 1.5rem;
 }
 
 .dark {

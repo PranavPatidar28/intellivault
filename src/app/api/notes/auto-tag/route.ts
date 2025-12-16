@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers as nextHeaders } from "next/headers";
 import { auth } from "@/lib/auth";
+import prisma from "@/lib/prisma";
 import { z } from "zod";
 import {
     autoTagNote,
@@ -104,7 +105,15 @@ export async function PUT(request: NextRequest) {
 
         const { noteId, tagNames } = result.data;
 
-        const applyResult = await applyTagsToNote(noteId, session.user.id, tagNames);
+        // Fetch user preferences to get default tag color
+        const preferences = await prisma.userPreferences.findUnique({
+            where: { userId: session.user.id },
+            select: { defaultTagColor: true },
+        });
+
+        const applyResult = await applyTagsToNote(noteId, session.user.id, tagNames, {
+            defaultColor: preferences?.defaultTagColor,
+        });
 
         return NextResponse.json({
             success: true,

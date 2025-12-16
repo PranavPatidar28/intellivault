@@ -53,6 +53,7 @@ import {
 import { useAIDump } from "@/hooks/use-ai-dump";
 import { useFileUpload, SUPPORTED_FILE_TYPES } from "@/hooks/use-file-upload";
 import { useToast } from "@/hooks/use-toast";
+import { usePreferences } from "@/components/PreferencesProvider";
 import { cn } from "@/lib/utils";
 import type { AIDumpOptions } from "@/lib/validations/ai-dump";
 import Link from "next/link";
@@ -128,6 +129,7 @@ function useResizablePanel(initialWidth: number, minWidth: number, maxWidth: num
 export default function AIDumpPage() {
     const router = useRouter();
     const { toast } = useToast();
+    const { preferences } = usePreferences();
 
     const [inputContent, setInputContent] = useState("");
     const [options, setOptions] = useState<AIDumpOptions>(DEFAULT_OPTIONS);
@@ -137,10 +139,19 @@ export default function AIDumpPage() {
     const [selectedModel, setSelectedModel] = useState<string>("gemini-2.0-flash");
     const [isRefining, setIsRefining] = useState(false);
     const [refinementInput, setRefinementInput] = useState("");
+    const hasAppliedPreferences = useRef(false);
 
     // Inline editor
     const [isEditMode, setIsEditMode] = useState(false);
     const [editedMarkdown, setEditedMarkdown] = useState("");
+
+    // Apply user preferences for default model
+    useEffect(() => {
+        if (preferences && !hasAppliedPreferences.current && preferences.defaultLLMModel) {
+            setSelectedModel(preferences.defaultLLMModel);
+            hasAppliedPreferences.current = true;
+        }
+    }, [preferences]);
 
     const detectedContentType = useMemo<ContentTypeResult | null>(() => {
         if (inputContent.length < 50) return null;
