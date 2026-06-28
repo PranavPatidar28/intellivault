@@ -57,11 +57,12 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    const { content, source, options } = parsed.data;
+    const { content, source, options, imageData } = parsed.data;
     const originalFilename = null; // Not exposed in current schema
 
-    // Content is guaranteed by schema refine (either content or fileRefs must be provided)
-    const contentText = content!;
+    // Content is optional when an image is provided; the service transcribes
+    // the image into text. Guarantee a string for the pipeline.
+    const contentText = content ?? "";
 
     // Create a TransformStream to handle the SSE response
     const encoder = new TextEncoder();
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
     // Start processing in the background
     (async () => {
         let noteId: string | null = null;
-        let finalData: Record<string, unknown> = {};
+        const finalData: Record<string, unknown> = {};
 
         try {
             // Send initial status
@@ -84,7 +85,8 @@ export async function POST(request: NextRequest) {
             for await (const event of processAIDumpStream(
                 contentText,
                 userId,
-                options as AIDumpOptions
+                options as AIDumpOptions,
+                imageData
             )) {
                 // Store final data for database save
                 if (event.type === "titles") {
@@ -101,6 +103,8 @@ export async function POST(request: NextRequest) {
                     finalData.actions = event.data;
                 } else if (event.type === "provenance") {
                     finalData.provenance = event.data;
+                } else if (event.type === "resolved_content") {
+                    finalData.resolvedContent = event.data;
                 }
 
                 // Send event to client
@@ -123,7 +127,7 @@ export async function POST(request: NextRequest) {
                     contentJSON: {},
                     contentText: (finalData.markdown as string) || contentText,
                     status: NoteStatus.DRAFT,
-                    rawText: contentText,
+                    rawText: (finalData.resolvedContent as string) || contentText,
                     source: source || "paste",
                     originalFilename: originalFilename || null,
                     titles: finalData.titles as object,

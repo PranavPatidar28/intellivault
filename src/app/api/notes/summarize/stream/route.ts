@@ -9,7 +9,7 @@ import { headers as nextHeaders } from "next/headers";
 import { auth } from "@/lib/auth";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { generateSummaryStream, generateContentHash, type SummarizationOptions } from "@/lib/ai/summarization-service";
+import { generateSummaryStreamParts, generateContentHash, type SummarizationOptions } from "@/lib/ai/summarization-service";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 // Request validation schema
@@ -95,11 +95,15 @@ export async function POST(request: NextRequest) {
         const stream = new ReadableStream({
             async start(controller) {
                 try {
-                    // Stream the summary chunks
-                    for await (const chunk of generateSummaryStream(fullContent, options as SummarizationOptions)) {
-                        fullSummary += chunk;
-                        // Send as SSE format
-                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ chunk })}\n\n`));
+                    // Stream parts: text accumulates into the persisted summary;
+                    // reasoning is forwarded as a separate event and NOT stored.
+                    for await (const part of generateSummaryStreamParts(fullContent, options as SummarizationOptions)) {
+                        if (part.kind === "reasoning") {
+                            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ reasoning: part.value })}\n\n`));
+                        } else {
+                            fullSummary += part.value;
+                            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ chunk: part.value })}\n\n`));
+                        }
                     }
 
                     // Send completion event with metadata
@@ -109,15 +113,18 @@ export async function POST(request: NextRequest) {
                         )
                     );
 
-                    // Save the summary to the database after streaming completes
-                    await prisma.note.update({
-                        where: { id: noteId },
-                        data: {
-                            summary: fullSummary,
-                            contentHash,
-                            aiProcessedAt: new Date(),
-                        },
-                    });
+                    // Persist only the text summary (reasoning is never stored).
+                    // Guard against an empty (reasoning-only) generation.
+                    if (fullSummary.trim() !== "") {
+                        await prisma.note.update({
+                            where: { id: noteId },
+                            data: {
+                                summary: fullSummary,
+                                contentHash,
+                                aiProcessedAt: new Date(),
+                            },
+                        });
+                    }
 
                     controller.close();
                 } catch (error) {

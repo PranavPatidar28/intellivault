@@ -3,21 +3,25 @@
  *
  * Orchestrates the AI Dump pipeline: ingests raw content and generates
  * structured output with titles, tags, TL;DR, markdown, and action items.
- * Leverages existing llm-provider.ts for multi-provider support.
+ * Uses the Vercel AI SDK via ./generate (structured output + streaming with
+ * reasoning separation).
  */
 
-import { generateText, streamText, type LLMOptions } from "./llm-provider";
+import { genText, genObject, genFullStream, genMultimodal, EmptyContentError, type GenOptions } from "./generate";
+import { getModelLabel, supportsMultimodal } from "./provider";
 import { suggestTags } from "./auto-tagging-service";
 import { chunkText } from "./chunker";
-import { PROMPTS, getPromptId, getPromptSnapshot } from "./ai-dump-prompts";
-import type {
-    AIDumpOptions,
-    AIDumpResult,
-    TitleVariant,
-    TagWithConfidence,
-    ActionItem,
-    Provenance,
-    AIDumpTone,
+import { PROMPTS, getPromptId } from "./ai-dump-prompts";
+import {
+    titleTagsTldrSchema,
+    actionsSchema,
+    type AIDumpOptions,
+    type AIDumpResult,
+    type TitleVariant,
+    type TagWithConfidence,
+    type ActionItem,
+    type Provenance,
+    type AIDumpTone,
 } from "@/lib/validations/ai-dump";
 
 // ============================================================================
@@ -27,6 +31,12 @@ import type {
 const MAX_CONTENT_LENGTH = 50000; // Max characters before chunking
 const CHUNK_SIZE = 4000;
 const MIN_CONTENT_LENGTH = 10;
+
+interface TitleTagsTldrResult {
+    titles: TitleVariant[];
+    tags: TagWithConfidence[];
+    tldr: string;
+}
 
 // ============================================================================
 // Main Processing Functions
@@ -40,8 +50,6 @@ export async function processAIDump(
     userId: string,
     options: AIDumpOptions
 ): Promise<AIDumpResult> {
-    const startTime = Date.now();
-
     // Validate content
     if (!content || content.trim().length < MIN_CONTENT_LENGTH) {
         throw new Error("Content is too short for processing");
@@ -95,7 +103,7 @@ export async function processAIDump(
     }
 
     const provenance: Provenance = {
-        llm_model: "gemini-2.0-flash", // Will be updated by actual provider
+        llm_model: getModelLabel(),
         prompt_template_id: getPromptId("TITLE_TAGS_TLDR"),
         temperature: options.temperature,
         generatedAt: new Date().toISOString(),
@@ -119,7 +127,13 @@ export async function regenerateSection(
     section: "titles" | "tags" | "markdown" | "actions",
     rawText: string,
     userId: string,
-    options: Partial<AIDumpOptions>
+    options: Partial<AIDumpOptions>,
+    extras?: {
+        /** Free-form refinement instruction for the markdown section. */
+        instruction?: string;
+        /** Current markdown to refine (so refinements compound on prior output). */
+        currentMarkdown?: string;
+    }
 ): Promise<Partial<AIDumpResult>> {
     const tone = options.tone ?? "balanced";
     const temperature = options.temperature ?? 0.2;
@@ -141,6 +155,17 @@ export async function regenerateSection(
             };
         }
         case "markdown": {
+            // If the user gave a refinement instruction and we have current
+            // output, refine that output instead of regenerating from scratch.
+            if (extras?.instruction && extras.currentMarkdown?.trim()) {
+                const refined = await refineMarkdown(
+                    extras.currentMarkdown,
+                    extras.instruction,
+                    tone,
+                    temperature
+                );
+                return { markdown: refined ?? extras.currentMarkdown };
+            }
             const fullOptions: AIDumpOptions = {
                 template: options.template ?? "auto",
                 toggles: {
@@ -170,14 +195,8 @@ export async function regenerateSection(
 // Individual Generation Functions
 // ============================================================================
 
-interface TitleTagsTldrResult {
-    titles: TitleVariant[];
-    tags: TagWithConfidence[];
-    tldr: string;
-}
-
 /**
- * Generate titles, tags, and TL;DR in a single LLM call
+ * Generate titles, tags, and TL;DR in a single structured LLM call.
  */
 async function generateTitleTagsTldr(
     content: string,
@@ -185,43 +204,18 @@ async function generateTitleTagsTldr(
     temperature?: number
 ): Promise<TitleTagsTldrResult | null> {
     const prompt = PROMPTS.TITLE_TAGS_TLDR;
-
-    const llmOptions: LLMOptions = {
-        systemPrompt: prompt.system,
-        temperature: temperature ?? prompt.temperature,
-        maxTokens: 1000,
-    };
-
     const userPrompt = prompt.getTemplate(tone) + content;
 
     try {
-        const response = await generateText(userPrompt, llmOptions);
-
-        // Parse JSON response
-        const jsonMatch = response.text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-            console.error("No JSON found in LLM response for title/tags/tldr");
-            return null;
-        }
-
-        const parsed = JSON.parse(jsonMatch[0]);
-
-        // Validate structure
-        if (!parsed.titles || !Array.isArray(parsed.titles)) {
-            return null;
-        }
-
+        const { object } = await genObject(userPrompt, titleTagsTldrSchema, {
+            system: prompt.system,
+            temperature: temperature ?? prompt.temperature,
+            maxOutputTokens: 1000,
+        });
         return {
-            titles: parsed.titles.map((t: Record<string, unknown>) => ({
-                variant: t.variant as TitleVariant["variant"],
-                text: String(t.text || ""),
-                score: Number(t.score) || 0.5,
-            })),
-            tags: (parsed.tags || []).map((t: Record<string, unknown>) => ({
-                name: String(t.name || ""),
-                confidence: Number(t.confidence) || 0.5,
-            })),
-            tldr: String(parsed.tldr || ""),
+            titles: object.titles,
+            tags: object.tags,
+            tldr: object.tldr,
         };
     } catch (error) {
         console.error("Error generating title/tags/tldr:", error);
@@ -237,13 +231,6 @@ async function generateStructuredMarkdown(
     options: AIDumpOptions
 ): Promise<string | null> {
     const prompt = PROMPTS.MARKDOWN_STRUCTURE;
-
-    const llmOptions: LLMOptions = {
-        systemPrompt: prompt.system,
-        temperature: options.temperature,
-        maxTokens: 3000,
-    };
-
     const userPrompt =
         prompt.getTemplate(options.tone, {
             preserveCode: options.toggles.preserveCode,
@@ -251,8 +238,12 @@ async function generateStructuredMarkdown(
         }) + content;
 
     try {
-        const response = await generateText(userPrompt, llmOptions);
-        return response.text.trim();
+        const result = await genText(userPrompt, {
+            system: prompt.system,
+            temperature: options.temperature,
+            maxOutputTokens: 3000,
+        });
+        return result.text.trim();
     } catch (error) {
         console.error("Error generating markdown:", error);
         return null;
@@ -260,40 +251,85 @@ async function generateStructuredMarkdown(
 }
 
 /**
- * Extract action items from content
+ * Refine an existing Markdown document according to a user instruction.
+ * Returns the revised markdown, or null on failure.
+ */
+async function refineMarkdown(
+    currentMarkdown: string,
+    instruction: string,
+    tone: AIDumpTone,
+    temperature?: number
+): Promise<string | null> {
+    const prompt = PROMPTS.MARKDOWN_REFINE;
+    const userPrompt =
+        prompt.getTemplate(tone, instruction) + currentMarkdown;
+
+    try {
+        const result = await genText(userPrompt, {
+            system: prompt.system,
+            temperature: temperature ?? prompt.temperature,
+            maxOutputTokens: 3000,
+        });
+        const text = result.text.trim();
+        return text === "" ? null : text;
+    } catch (error) {
+        console.error("Error refining markdown:", error);
+        return null;
+    }
+}
+
+/**
+ * Transcribe/describe an uploaded image into text so the rest of the AI Dump
+ * pipeline (which is text-based) can process it. Returns extracted text, or
+ * null if multimodal isn't available or the call fails.
+ */
+async function transcribeImage(
+    imageDataUrl: string,
+    userInstruction?: string
+): Promise<string | null> {
+    if (!supportsMultimodal()) return null;
+
+    // Split a data URL ("data:image/png;base64,XXXX") into mime + base64.
+    const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    const mimeType = match?.[1] ?? "image/jpeg";
+    const base64Data = match?.[2] ?? imageDataUrl;
+
+    try {
+        const result = await genMultimodal(
+            [
+                {
+                    type: "text",
+                    text:
+                        (userInstruction?.trim() ||
+                            "Extract and transcribe all text and meaningful content from this image.") +
+                        "\n\nProvide a thorough, faithful textual representation: transcribe any text verbatim, and describe diagrams, tables, or charts in detail. Output only the extracted content.",
+                },
+                { type: "image", base64Data, mimeType },
+            ],
+            { temperature: 0.2, maxOutputTokens: 2000 }
+        );
+        const text = result.text.trim();
+        return text === "" ? null : text;
+    } catch (error) {
+        console.error("Error transcribing image:", error);
+        return null;
+    }
+}
+
+/**
+ * Extract action items from content (structured output).
  */
 async function extractActions(content: string): Promise<ActionItem[]> {
     const prompt = PROMPTS.ACTION_EXTRACTION;
-
-    const llmOptions: LLMOptions = {
-        systemPrompt: prompt.system,
-        temperature: prompt.temperature,
-        maxTokens: 500,
-    };
-
     const userPrompt = prompt.template + content;
 
     try {
-        const response = await generateText(userPrompt, llmOptions);
-
-        // Parse JSON array response
-        const jsonMatch = response.text.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) {
-            return [];
-        }
-
-        const parsed = JSON.parse(jsonMatch[0]);
-
-        if (!Array.isArray(parsed)) {
-            return [];
-        }
-
-        return parsed.map((a: Record<string, unknown>) => ({
-            text: String(a.text || ""),
-            assignee: String(a.assignee || ""),
-            due_date: a.due_date ? String(a.due_date) : null,
-            confidence: Number(a.confidence) || 0.5,
-        }));
+        const { object } = await genObject(userPrompt, actionsSchema, {
+            system: prompt.system,
+            temperature: prompt.temperature,
+            maxOutputTokens: 500,
+        });
+        return object.actions;
     } catch (error) {
         console.error("Error extracting actions:", error);
         return [];
@@ -308,18 +344,15 @@ async function generateSummary(
     tone: AIDumpTone
 ): Promise<string> {
     const prompt = PROMPTS.SUMMARY;
-
-    const llmOptions: LLMOptions = {
-        systemPrompt: prompt.system,
-        temperature: prompt.temperature,
-        maxTokens: 500,
-    };
-
     const userPrompt = prompt.getTemplate(tone) + content;
 
     try {
-        const response = await generateText(userPrompt, llmOptions);
-        return response.text.trim();
+        const result = await genText(userPrompt, {
+            system: prompt.system,
+            temperature: prompt.temperature,
+            maxOutputTokens: 500,
+        });
+        return result.text.trim();
     } catch (error) {
         console.error("Error generating summary:", error);
         // Fallback: return first 500 chars of content
@@ -335,7 +368,7 @@ async function generateSummary(
  * Generate default titles when LLM call fails
  */
 function getDefaultTitles(content: string): TitleVariant[] {
-    const firstLine = content.split("\n")[0].slice(0, 100);
+    const firstLine = (content.split("\n")[0] ?? "").slice(0, 100);
     const words = firstLine.split(/\s+/);
 
     return [
@@ -383,73 +416,105 @@ export function chunkContentForProcessing(
 // ============================================================================
 
 /**
- * Stream structured Markdown generation
- * Yields text chunks as they arrive from the LLM
+ * Stream structured Markdown generation. Yields text chunks (no reasoning).
  */
 export async function* streamStructuredMarkdown(
     content: string,
     options: AIDumpOptions
 ): AsyncGenerator<string, void, unknown> {
     const prompt = PROMPTS.MARKDOWN_STRUCTURE;
-
-    const llmOptions: LLMOptions = {
-        systemPrompt: prompt.system,
-        temperature: options.temperature,
-        maxTokens: 3000,
-    };
-
     const userPrompt =
         prompt.getTemplate(options.tone, {
             preserveCode: options.toggles.preserveCode,
             template: options.template,
         }) + content;
 
-    yield* streamText(userPrompt, llmOptions);
+    const llmOptions: GenOptions = {
+        system: prompt.system,
+        temperature: options.temperature,
+        maxOutputTokens: 3000,
+    };
+
+    for await (const part of genFullStream(userPrompt, llmOptions)) {
+        if (part.kind === "text") yield part.value;
+    }
 }
 
 /**
- * Stream summary generation
- * Yields text chunks as they arrive from the LLM
+ * Stream summary generation. Yields text chunks (no reasoning).
  */
 export async function* streamSummary(
     content: string,
     tone: AIDumpTone
 ): AsyncGenerator<string, void, unknown> {
     const prompt = PROMPTS.SUMMARY;
-
-    const llmOptions: LLMOptions = {
-        systemPrompt: prompt.system,
-        temperature: prompt.temperature,
-        maxTokens: 500,
-    };
-
     const userPrompt = prompt.getTemplate(tone) + content;
 
-    yield* streamText(userPrompt, llmOptions);
+    const llmOptions: GenOptions = {
+        system: prompt.system,
+        temperature: prompt.temperature,
+        maxOutputTokens: 500,
+    };
+
+    for await (const part of genFullStream(userPrompt, llmOptions)) {
+        if (part.kind === "text") yield part.value;
+    }
 }
 
 /**
- * Process AI Dump with streaming for markdown
- * Returns non-streamed parts immediately, then streams markdown
+ * Process AI Dump with streaming. Emits structured events; markdown and
+ * summary stream incrementally with reasoning surfaced as separate events.
  */
 export async function* processAIDumpStream(
     content: string,
     userId: string,
-    options: AIDumpOptions
+    options: AIDumpOptions,
+    imageData?: string
 ): AsyncGenerator<{ type: string; data: unknown }, void, unknown> {
     const MAX_CONTENT_LENGTH_STREAM = 50000;
     const MIN_CONTENT_LENGTH_STREAM = 10;
 
+    // If an image was uploaded, transcribe it into text first and merge that
+    // into the content so the (text-based) pipeline can work on it.
+    let workingContent = content;
+    if (imageData) {
+        yield { type: "status", data: "Analyzing image..." };
+        const transcript = await transcribeImage(imageData, content);
+        if (transcript) {
+            // When the user only uploaded an image (placeholder content), the
+            // transcript becomes the content; otherwise it augments their text.
+            workingContent = content.trim()
+                ? `${content}\n\n## Extracted from image\n\n${transcript}`
+                : transcript;
+        } else if (!content.trim()) {
+            throw new Error(
+                "Could not extract content from the image. The configured AI provider may not support image input."
+            );
+        }
+    }
+
     // Validate content
-    if (!content || content.trim().length < MIN_CONTENT_LENGTH_STREAM) {
+    if (!workingContent || workingContent.trim().length < MIN_CONTENT_LENGTH_STREAM) {
         throw new Error("Content is too short for processing");
     }
 
     // Truncate if too long
-    const processedContent =
-        content.length > MAX_CONTENT_LENGTH_STREAM
-            ? content.slice(0, MAX_CONTENT_LENGTH_STREAM) + "\n\n[Content truncated...]"
-            : content;
+    const wasTruncated = workingContent.length > MAX_CONTENT_LENGTH_STREAM;
+    const processedContent = wasTruncated
+        ? workingContent.slice(0, MAX_CONTENT_LENGTH_STREAM) + "\n\n[Content truncated...]"
+        : workingContent;
+
+    // Warn the client when we had to drop content so it isn't silent.
+    if (wasTruncated) {
+        yield {
+            type: "warning",
+            data: `Input was longer than ${MAX_CONTENT_LENGTH_STREAM.toLocaleString()} characters and was truncated for processing.`,
+        };
+    }
+
+    // Expose the resolved input (post image-transcription) so the route can
+    // persist it as rawText — important for later regeneration of image dumps.
+    yield { type: "resolved_content", data: processedContent };
 
     // First, generate titles/tags/tldr (non-streaming, needed for UI)
     yield { type: "status", data: "Generating titles and tags..." };
@@ -487,26 +552,55 @@ export async function* processAIDumpStream(
     // Yield TL;DR
     yield { type: "tldr", data: titleTagsTldr?.tldr ?? "" };
 
-    // Stream markdown
+    // Stream markdown (text + reasoning as separate events)
     yield { type: "status", data: "Generating structured markdown..." };
     yield { type: "markdown_start", data: null };
 
     let fullMarkdown = "";
-    for await (const chunk of streamStructuredMarkdown(processedContent, options)) {
-        fullMarkdown += chunk;
-        yield { type: "markdown_chunk", data: chunk };
+    const mdPrompt = PROMPTS.MARKDOWN_STRUCTURE;
+    const mdUserPrompt =
+        mdPrompt.getTemplate(options.tone, {
+            preserveCode: options.toggles.preserveCode,
+            template: options.template,
+        }) + processedContent;
+    for await (const part of genFullStream(mdUserPrompt, {
+        system: mdPrompt.system,
+        temperature: options.temperature,
+        maxOutputTokens: 3000,
+    })) {
+        if (part.kind === "reasoning") {
+            yield { type: "reasoning", data: part.value };
+        } else {
+            fullMarkdown += part.value;
+            yield { type: "markdown_chunk", data: part.value };
+        }
     }
+    // Fallback so an empty (reasoning-only) generation never yields blank content.
+    if (fullMarkdown.trim() === "") fullMarkdown = processedContent;
 
     yield { type: "markdown_end", data: fullMarkdown };
 
-    // Stream summary
+    // Stream summary (text + reasoning as separate events)
     yield { type: "status", data: "Generating summary..." };
     yield { type: "summary_start", data: null };
 
     let fullSummary = "";
-    for await (const chunk of streamSummary(processedContent, options.tone)) {
-        fullSummary += chunk;
-        yield { type: "summary_chunk", data: chunk };
+    const sumPrompt = PROMPTS.SUMMARY;
+    const sumUserPrompt = sumPrompt.getTemplate(options.tone) + processedContent;
+    for await (const part of genFullStream(sumUserPrompt, {
+        system: sumPrompt.system,
+        temperature: sumPrompt.temperature,
+        maxOutputTokens: 500,
+    })) {
+        if (part.kind === "reasoning") {
+            yield { type: "reasoning", data: part.value };
+        } else {
+            fullSummary += part.value;
+            yield { type: "summary_chunk", data: part.value };
+        }
+    }
+    if (fullSummary.trim() === "") {
+        fullSummary = titleTagsTldr?.tldr || processedContent.slice(0, 500);
     }
 
     yield { type: "summary_end", data: fullSummary };
@@ -522,7 +616,7 @@ export async function* processAIDumpStream(
     yield {
         type: "provenance",
         data: {
-            llm_model: "gemini-2.0-flash",
+            llm_model: getModelLabel(),
             prompt_template_id: getPromptId("TITLE_TAGS_TLDR"),
             temperature: options.temperature,
             generatedAt: new Date().toISOString(),
@@ -532,10 +626,5 @@ export async function* processAIDumpStream(
     yield { type: "complete", data: null };
 }
 
-// Type for internal use
-interface TitleTagsTldrResult {
-    titles: TitleVariant[];
-    tags: TagWithConfidence[];
-    tldr: string;
-}
-
+// Keep EmptyContentError referenced for callers that want to special-case it.
+export { EmptyContentError };

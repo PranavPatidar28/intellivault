@@ -23,6 +23,8 @@ export interface SummarizeOptions {
     stream?: boolean;
     /** Callback for streaming chunks */
     onChunk?: (chunk: string, accumulated: string) => void;
+    /** Callback for streamed reasoning ("thinking") deltas, separate from the answer */
+    onReasoning?: (delta: string, accumulated: string) => void;
     /** Context options for multimodal summarization */
     context?: {
         includeText?: boolean;
@@ -141,6 +143,7 @@ export function useSummarize(): UseSummarizeReturn {
 
                 const decoder = new TextDecoder();
                 let accumulated = "";
+                let reasoning = "";
                 let buffer = "";
 
                 while (true) {
@@ -161,6 +164,11 @@ export function useSummarize(): UseSummarizeReturn {
 
                             if (data.error) {
                                 throw new Error(data.error);
+                            }
+
+                            if (data.reasoning) {
+                                reasoning += data.reasoning;
+                                options.onReasoning?.(data.reasoning, reasoning);
                             }
 
                             if (data.chunk) {

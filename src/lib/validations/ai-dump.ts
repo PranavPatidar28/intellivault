@@ -51,6 +51,9 @@ export const createAIDumpSchema = z
             .enum(["webclipper", "upload", "clipboard", "paste"])
             .default("paste"),
         options: aiDumpOptionsSchema.prefault({}),
+        // Optional base64 data-URL of an uploaded image, for multimodal
+        // processing (e.g. "data:image/png;base64,....").
+        imageData: z.string().optional(),
         metadata: z
             .object({
                 originalFilename: z.string().optional(),
@@ -58,12 +61,19 @@ export const createAIDumpSchema = z
             })
             .optional(),
     })
-    .refine((data) => data.content || (data.fileRefs?.length ?? 0) > 0, {
-        message: "Either content or fileRefs must be provided",
-    });
+    .refine(
+        (data) =>
+            data.content || data.imageData || (data.fileRefs?.length ?? 0) > 0,
+        {
+            message: "Either content, imageData, or fileRefs must be provided",
+        }
+    );
 
 export const regenerateSectionSchema = z.object({
     section: z.enum(["titles", "tags", "markdown", "actions"]),
+    // Free-form refinement instruction for the markdown section (e.g.
+    // "Make it shorter", "Add bullet points"). Ignored for other sections.
+    instruction: z.string().max(2000).optional(),
     options: z
         .object({
             temperature: z.number().min(0).max(1).optional(),
@@ -116,6 +126,38 @@ export const aiDumpResultSchema = z.object({
     markdown: z.string(),
     actions: z.array(actionItemSchema),
     provenance: provenanceSchema,
+});
+
+// ============================================================================
+// Structured-output schemas for the AI SDK's generateObject (replaces the old
+// regex/JSON.parse extraction of LLM responses). Kept lenient (min lengths,
+// not exact counts) so a slightly off-count response still parses.
+// ============================================================================
+
+export const titleTagsTldrSchema = z.object({
+    titles: z.array(titleVariantSchema).min(1),
+    tags: z.array(tagWithConfidenceSchema),
+    tldr: z.string(),
+});
+
+export const actionsSchema = z.object({
+    actions: z.array(actionItemSchema),
+});
+
+export const tagSuggestionsSchema = z.object({
+    suggestions: z.array(
+        z.object({
+            name: z.string(),
+            confidence: z.number().min(0).max(1).default(0.5),
+            reason: z.string().default("AI suggested"),
+        })
+    ),
+});
+
+export const summaryStructuredSchema = z.object({
+    summary: z.string(),
+    title: z.string().optional(),
+    keywords: z.array(z.string()).optional(),
 });
 
 // ============================================================================

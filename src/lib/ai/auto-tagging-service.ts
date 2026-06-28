@@ -1,12 +1,14 @@
 /**
  * Auto-Tagging Service
  *
- * Intelligently suggests and applies tags to notes using LLM providers.
+ * Intelligently suggests and applies tags to notes using the Vercel AI SDK.
  * Prioritizes matching with user's existing tags and supports hierarchical tags.
+ * Tag suggestions use structured output (generateObject) — no regex parsing.
  */
 
 import prisma from "@/lib/prisma";
-import { generateText, type LLMOptions } from "./llm-provider";
+import { genObject, type GenOptions } from "./generate";
+import { tagSuggestionsSchema } from "@/lib/validations/ai-dump";
 
 // ============================================================================
 // Types & Interfaces
@@ -39,7 +41,7 @@ export interface AutoTagOptions {
     /** Confidence threshold for auto-apply */
     autoApplyThreshold?: number;
     /** LLM options override */
-    llmOptions?: LLMOptions;
+    llmOptions?: GenOptions;
 }
 
 export interface AutoTagResult {
@@ -110,21 +112,22 @@ export async function suggestTags(
     // Build the prompt
     const prompt = buildTaggingPrompt(content, existingTagNames, maxSuggestions);
 
-    const systemPrompt = `You are a precise tagging assistant. You analyze content and suggest relevant tags. Prefer using existing tags when they fit well. Always respond with valid JSON.`;
+    const systemPrompt = `You are a precise tagging assistant. You analyze content and suggest relevant tags. Prefer using existing tags when they fit well.`;
 
     try {
-        const response = await generateText(prompt, {
-            ...llmOptions,
-            maxTokens: 500,
-            temperature: 0.4,
-            systemPrompt,
-        });
-
-        // Parse the response
-        const rawSuggestions = parseTagResponse(response.text);
+        const { object, provider, latencyMs } = await genObject(
+            prompt,
+            tagSuggestionsSchema,
+            {
+                ...llmOptions,
+                maxOutputTokens: 500,
+                temperature: 0.4,
+                system: systemPrompt,
+            }
+        );
 
         // Enrich suggestions with existing tag data
-        const suggestions: TagSuggestion[] = rawSuggestions
+        const suggestions: TagSuggestion[] = object.suggestions
             .map((raw) => {
                 const existingTag = existingTags.find(
                     (t) => t.name.toLowerCase() === raw.name.toLowerCase()
@@ -133,7 +136,7 @@ export async function suggestTags(
                 return {
                     name: existingTag?.name || raw.name,
                     slug: existingTag?.slug || generateSlug(raw.name),
-                    confidence: Math.min(1, Math.max(0, raw.confidence || 0.5)),
+                    confidence: Math.min(1, Math.max(0, raw.confidence ?? 0.5)),
                     reason: raw.reason || "AI suggested",
                     isExisting: !!existingTag,
                     existingTagId: existingTag?.id,
@@ -145,8 +148,8 @@ export async function suggestTags(
 
         return {
             suggestions,
-            provider: response.provider,
-            latencyMs: response.latencyMs,
+            provider,
+            latencyMs,
         };
     } catch (error) {
         console.error("Auto-tagging failed:", error);
@@ -322,46 +325,5 @@ INSTRUCTIONS:
 4. Tags should be 1-3 words, lowercase
 5. Assign confidence scores based on relevance (0.0-1.0)
 
-Respond with a JSON array of objects:
-[
-  { "name": "tag-name", "confidence": 0.9, "reason": "brief reason" },
-  ...
-]`;
-}
-
-interface RawTagSuggestion {
-    name: string;
-    confidence?: number;
-    reason?: string;
-}
-
-function parseTagResponse(responseText: string): RawTagSuggestion[] {
-    try {
-        // Extract JSON from response (handle markdown code blocks)
-        const jsonMatch =
-            responseText.match(/```(?:json)?\s*([\s\S]*?)```/) ||
-            responseText.match(/(\[[\s\S]*\])/);
-
-        if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[1]);
-            if (Array.isArray(parsed)) {
-                return parsed.filter(
-                    (item) => item && typeof item.name === "string" && item.name.trim()
-                );
-            }
-        }
-    } catch {
-        // JSON parsing failed
-    }
-
-    // Fallback: try to extract tag names from text
-    const tagMatches = responseText.match(/"name":\s*"([^"]+)"/g);
-    if (tagMatches) {
-        return tagMatches.map((match) => {
-            const name = match.match(/"name":\s*"([^"]+)"/)?.[1] || "";
-            return { name, confidence: 0.5 };
-        });
-    }
-
-    return [];
+Return an object with a "suggestions" array, each item having: name (string), confidence (0.0-1.0), and reason (brief string).`;
 }

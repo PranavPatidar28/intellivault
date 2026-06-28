@@ -108,18 +108,13 @@ export function useFileUpload(): UseFileUploadReturn {
             const formData = new FormData();
             formData.append("file", file);
 
-            // Simulate progress for better UX
-            const progressInterval = setInterval(() => {
-                setUploadProgress((prev) => Math.min(prev + 10, 90));
-            }, 100);
-
+            // The fetch API can't report real upload progress for a FormData
+            // body, so we don't fake a percentage. The UI shows an
+            // indeterminate "processing" state instead of a misleading bar.
             const response = await fetch("/api/ai-dump/upload", {
                 method: "POST",
                 body: formData,
             });
-
-            clearInterval(progressInterval);
-            setUploadProgress(100);
 
             if (!response.ok) {
                 const error = await response.json();

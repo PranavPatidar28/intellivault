@@ -48,23 +48,29 @@ export {
   type QueueStatus,
 } from "./embedding-sync";
 
-// LLM provider abstraction
+// LLM provider registry (Vercel AI SDK)
 export {
-  generateText,
-  generateMultimodal,
-  getAvailableProvider,
-  getMultimodalProvider,
-  getProviderStatus,
-  getAllProviders,
-  OllamaProvider,
-  GeminiProvider,
-  OpenAIProvider,
-  OpenRouterProvider,
-  type LLMProvider,
-  type LLMOptions,
-  type LLMResponse,
+  getModel,
+  getMultimodalModel,
+  supportsMultimodal,
+  getModelLabel,
+  isReasoningProvider,
+  type ProviderName,
+} from "./provider";
+
+// LLM generation primitives
+export {
+  genText,
+  genObject,
+  genTextStream,
+  genFullStream,
+  genMultimodal,
+  EmptyContentError,
+  type GenOptions,
+  type GenResult,
+  type StreamPart,
   type MultimodalPart,
-} from "./llm-provider";
+} from "./generate";
 
 // Content extraction for multimodal
 export {
