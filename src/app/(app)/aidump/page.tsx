@@ -58,6 +58,7 @@ import { cn } from "@/lib/utils";
 import type { AIDumpOptions } from "@/lib/validations/ai-dump";
 import Link from "next/link";
 import { MarkdownRenderer } from "@/components/markdown";
+import { ThinkingPanel } from "@/components/ai-dump/ThinkingPanel";
 import { detectContentType, getContentTypeDisplay, type ContentTypeResult } from "@/lib/ai/content-type-detection";
 
 
@@ -562,6 +563,12 @@ export default function AIDumpPage() {
                 </aside>
                 {/* Center Panel - Preview (Primary Focus) */}
                 <main className="flex-1 overflow-auto flex flex-col bg-background min-w-0 border-r">
+                    {/* Reasoning ("Thinking…") — self-hides when there is none */}
+                    {aiDump?.reasoning && (
+                        <div className="px-4 pt-3">
+                            <ThinkingPanel reasoning={aiDump.reasoning} isStreaming={isProcessing} />
+                        </div>
+                    )}
                     {!aiDump && !isProcessing ? (
                         // Input State
                         <div className="flex-1 flex flex-col p-6">

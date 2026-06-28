@@ -230,9 +230,7 @@ Provide ONLY the Markdown content. No explanations, no "Here is the document:" p
 CRITICAL: Only extract actions that are EXPLICITLY stated in the content.
 - You must NOT invent, assume, or infer any actions
 - You must NOT create placeholder or example actions
-- If no actions exist, you MUST return an empty array []
-
-Your output must be ONLY a valid JSON array. No text before or after.`,
+- If no actions exist, return an empty "actions" array`,
 
         template: `Extract ONLY explicitly stated action items, tasks, and to-dos from this content.
 
@@ -253,19 +251,13 @@ Your output must be ONLY a valid JSON array. No text before or after.`,
 - Your own ideas - ONLY what's in the content
 
 ## Output Format
-Each action item must have:
+Return an object with an "actions" array. Each action item has:
 - "text": The specific action (verb + object)
 - "assignee": Person responsible ("" if not specified)
 - "due_date": ISO date YYYY-MM-DD if explicitly stated (null otherwise)
 - "confidence": Your confidence 0.0-1.0 in this extraction
 
-## Example Output
-[
-  {"text": "Update the API documentation", "assignee": "John", "due_date": "2024-12-15", "confidence": 0.95},
-  {"text": "Review pull request #42", "assignee": "", "due_date": null, "confidence": 0.80}
-]
-
-If there are NO action items in the content, return: []
+If there are NO action items in the content, return an empty "actions" array.
 
 ## Content to Analyze
 `,

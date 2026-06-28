@@ -30,6 +30,7 @@ import { useSummarize, useAutoTag, type TagSuggestion, type SummarizeOptions } f
 import { useRelatedNotes } from "@/hooks/use-related-notes";
 import type { Tag } from "@/components/TagInput";
 import { MarkdownRenderer } from "@/components/markdown";
+import { ThinkingPanel } from "@/components/ai-dump/ThinkingPanel";
 
 // ============================================================================
 // Types
@@ -111,6 +112,7 @@ export function AISidebar({
     initialGeneratedTitle,
 }: AISidebarProps) {
     const [summary, setSummary] = useState<string | null>(initialSummary || null);
+    const [reasoning, setReasoning] = useState<string>("");
     const [generatedTitle, setGeneratedTitle] = useState<string | null>(initialGeneratedTitle || null);
     const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
     const [hasLoadedSummary, setHasLoadedSummary] = useState(!!initialSummary);
@@ -157,6 +159,7 @@ export function AISidebar({
     const handleGenerateSummary = async () => {
         // Clear previous summary to show streaming fresh
         setSummary("");
+        setReasoning("");
         setGeneratedTitle(null);
         setHasLoadedSummary(true);
 
@@ -170,6 +173,10 @@ export function AISidebar({
             onChunk: (_chunk, accumulated) => {
                 // Update summary state as chunks arrive
                 setSummary(accumulated);
+            },
+            onReasoning: (_delta, accumulated) => {
+                // Model reasoning streams separately from the answer.
+                setReasoning(accumulated);
             },
         });
 
@@ -317,6 +324,13 @@ export function AISidebar({
                     </div>
 
                     {/* Summary Content */}
+                    {reasoning && (
+                        <ThinkingPanel
+                            reasoning={reasoning}
+                            isStreaming={isSummarizing}
+                            className="mb-2"
+                        />
+                    )}
                     {isSummarizing && !summary && (
                         <div className="flex items-center justify-center gap-2 py-4 bg-muted/30 rounded-lg">
                             <Loader2 size={14} className="animate-spin text-primary" />

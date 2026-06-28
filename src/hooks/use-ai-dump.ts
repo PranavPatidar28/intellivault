@@ -10,7 +10,6 @@ import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type {
     AIDumpOptions,
-    AIDumpResult,
     TitleVariant,
     TagWithConfidence,
     ActionItem,
@@ -30,6 +29,8 @@ export interface AIDumpData {
     actions: ActionItem[];
     rawText: string;
     status: "draft" | "final";
+    /** Streamed model reasoning ("thinking"), separate from the answer. */
+    reasoning?: string;
 }
 
 type SectionType = "titles" | "tags" | "markdown" | "actions";
@@ -140,6 +141,7 @@ export function useAIDump(): UseAIDumpReturn {
             let summary = "";
             let markdown = "";
             let actions: ActionItem[] = [];
+            let reasoning = "";
 
             try {
                 const response = await fetch("/api/ai-dump/stream", {
@@ -232,6 +234,10 @@ export function useAIDump(): UseAIDumpReturn {
                                     actions = event.data;
                                     setAIDump((prev) => prev ? { ...prev, actions: event.data } : null);
                                     break;
+                                case "reasoning":
+                                    reasoning += event.data;
+                                    setAIDump((prev) => prev ? { ...prev, reasoning } : null);
+                                    break;
                                 case "note_created":
                                     noteId = event.data.noteId;
                                     setAIDump((prev) => prev ? { ...prev, noteId } : null);
@@ -260,6 +266,7 @@ export function useAIDump(): UseAIDumpReturn {
                     actions,
                     rawText: content,
                     status: "draft",
+                    reasoning: reasoning || undefined,
                 });
 
                 toast({

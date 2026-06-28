@@ -119,6 +119,38 @@ export const aiDumpResultSchema = z.object({
 });
 
 // ============================================================================
+// Structured-output schemas for the AI SDK's generateObject (replaces the old
+// regex/JSON.parse extraction of LLM responses). Kept lenient (min lengths,
+// not exact counts) so a slightly off-count response still parses.
+// ============================================================================
+
+export const titleTagsTldrSchema = z.object({
+    titles: z.array(titleVariantSchema).min(1),
+    tags: z.array(tagWithConfidenceSchema),
+    tldr: z.string(),
+});
+
+export const actionsSchema = z.object({
+    actions: z.array(actionItemSchema),
+});
+
+export const tagSuggestionsSchema = z.object({
+    suggestions: z.array(
+        z.object({
+            name: z.string(),
+            confidence: z.number().min(0).max(1).default(0.5),
+            reason: z.string().default("AI suggested"),
+        })
+    ),
+});
+
+export const summaryStructuredSchema = z.object({
+    summary: z.string(),
+    title: z.string().optional(),
+    keywords: z.array(z.string()).optional(),
+});
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
