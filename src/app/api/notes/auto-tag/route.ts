@@ -13,6 +13,8 @@ import {
     autoTagNote,
     applyTagsToNote,
 } from "@/lib/ai/auto-tagging-service";
+import { errorResponse } from "@/lib/api-error";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 // Request validation schema
 const autoTagRequestSchema = z.object({
@@ -41,6 +43,9 @@ export async function POST(request: NextRequest) {
     if (!session?.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = enforceRateLimit(session.user.id, RATE_LIMITS.ai);
+    if (limited) return limited;
 
     try {
         const body = await request.json();
@@ -71,10 +76,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Note not found" }, { status: 404 });
         }
 
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : "Failed to generate tag suggestions" },
-            { status: 500 }
-        );
+        return errorResponse("Failed to generate tag suggestions", 500, error);
     }
 }
 
@@ -91,6 +93,9 @@ export async function PUT(request: NextRequest) {
     if (!session?.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = enforceRateLimit(session.user.id, RATE_LIMITS.ai);
+    if (limited) return limited;
 
     try {
         const body = await request.json();
@@ -122,9 +127,6 @@ export async function PUT(request: NextRequest) {
         });
     } catch (error) {
         console.error("Error applying tags:", error);
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : "Failed to apply tags" },
-            { status: 500 }
-        );
+        return errorResponse("Failed to apply tags", 500, error);
     }
 }

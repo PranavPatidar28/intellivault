@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { useNotes } from '@/hooks/use-notes';
 
 // Mock fetch globally
@@ -150,11 +150,18 @@ describe('useNotes', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    const refetchPromise = result.current.refetch();
+    // Start refetch inside act so the synchronous setIsLoading(true) flushes,
+    // but don't await yet so we can observe the in-flight loading state.
+    let refetchPromise: Promise<void>;
+    act(() => {
+      refetchPromise = result.current.refetch();
+    });
 
     expect(result.current.isLoading).toBe(true);
 
-    await refetchPromise;
+    await act(async () => {
+      await refetchPromise;
+    });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);

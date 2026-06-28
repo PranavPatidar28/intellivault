@@ -6,6 +6,7 @@
  */
 
 import type { JSONContent } from "@tiptap/core";
+import { safeFetchImage } from "./safe-fetch";
 
 // ============================================================================
 // Types
@@ -247,23 +248,19 @@ export function validateContentForSummary(
 // ============================================================================
 
 /**
- * Fetch image and convert to base64
+ * Fetch image and convert to base64.
+ *
+ * Image URLs originate from user-authored note content, so the fetch is
+ * routed through safeFetchImage which blocks SSRF vectors (internal hosts,
+ * cloud metadata, redirects) and bounds time + size. Returns null on any
+ * failure or rejected URL so summarization degrades gracefully.
  */
 export async function fetchImageAsBase64(url: string): Promise<{ base64: string; mimeType: string } | null> {
     try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.warn(`Failed to fetch image: ${url}`);
-            return null;
-        }
-
-        const buffer = await response.arrayBuffer();
-        const base64 = Buffer.from(buffer).toString("base64");
-        const mimeType = response.headers.get("content-type") || "image/jpeg";
-
-        return { base64, mimeType };
+        const { buffer, mimeType } = await safeFetchImage(url);
+        return { base64: buffer.toString("base64"), mimeType };
     } catch (error) {
-        console.warn(`Error fetching image ${url}:`, error);
+        console.warn(`Skipping image (unsafe or unreachable) ${url}:`, error instanceof Error ? error.message : error);
         return null;
     }
 }

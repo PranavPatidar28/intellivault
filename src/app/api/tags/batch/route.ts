@@ -21,14 +21,25 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { tagIds, operation, color } = batchSchema.parse(body);
+    const parsed = batchSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const { tagIds, operation, color } = parsed.data;
+
+    // All operations are scoped to the caller's own tags. updateMany silently
+    // no-ops on rows that don't match, so foreign tag IDs are ignored.
+    const ownerScope = { id: { in: tagIds }, userId: session.user.id };
 
     if (operation === "delete") {
       // Soft delete
-      await prisma.tag.updateMany({
-        where: {
-          id: { in: tagIds },
-        },
+      const result = await prisma.tag.updateMany({
+        where: ownerScope,
         data: {
           deletedAt: new Date(),
         },
@@ -36,7 +47,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        deletedCount: tagIds.length,
+        deletedCount: result.count,
       });
     } else if (operation === "recolor") {
       if (!color) {
@@ -46,10 +57,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      await prisma.tag.updateMany({
-        where: {
-          id: { in: tagIds },
-        },
+      const result = await prisma.tag.updateMany({
+        where: ownerScope,
         data: {
           color,
         },
@@ -57,37 +66,37 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        updatedCount: tagIds.length,
+        updatedCount: result.count,
       });
     } else if (operation === "archive") {
-      await prisma.tag.updateMany({
-        where: { id: { in: tagIds } },
+      const result = await prisma.tag.updateMany({
+        where: ownerScope,
         data: { isArchived: true },
       });
 
       return NextResponse.json({
         success: true,
-        updatedCount: tagIds.length,
+        updatedCount: result.count,
       });
     } else if (operation === "unarchive") {
-      await prisma.tag.updateMany({
-        where: { id: { in: tagIds } },
+      const result = await prisma.tag.updateMany({
+        where: ownerScope,
         data: { isArchived: false },
       });
 
       return NextResponse.json({
         success: true,
-        updatedCount: tagIds.length,
+        updatedCount: result.count,
       });
     } else if (operation === "favorite") {
-      await prisma.tag.updateMany({
-        where: { id: { in: tagIds } },
+      const result = await prisma.tag.updateMany({
+        where: ownerScope,
         data: { isFavorite: true },
       });
 
       return NextResponse.json({
         success: true,
-        updatedCount: tagIds.length,
+        updatedCount: result.count,
       });
     }
 

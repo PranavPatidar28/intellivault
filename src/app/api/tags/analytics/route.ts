@@ -14,110 +14,74 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Get total tags count
-    const totalTags = await prisma.tag.count({
-      where: { 
-        deletedAt: null,
-        userId: session.user.id,
-      },
-    });
+    const userId = session.user.id;
+    const baseWhere = { deletedAt: null, userId };
+    const now = new Date();
+    const sevenDaysAgo = subDays(now, 7);
+    const fourteenDaysAgo = subDays(now, 14);
+    const thirtyDaysAgo = subDays(now, 30);
 
-    const activeTags = await prisma.tag.count({
-      where: { 
-        deletedAt: null, 
-        isArchived: false,
-        userId: session.user.id,
-      },
-    });
-
-    const archivedTags = await prisma.tag.count({
-      where: { 
-        deletedAt: null, 
-        isArchived: true,
-        userId: session.user.id,
-      },
-    });
-
-    // Get orphaned tags (tags with 0 notes)
-    const orphanedTags = await prisma.tag.count({
-      where: {
-        deletedAt: null,
-        userId: session.user.id,
-        notes: { none: {} },
-      },
-    });
-
-    // Get most used tags (top 10)
-    const mostUsedTags = await prisma.tag.findMany({
-      where: { 
-        deletedAt: null,
-        userId: session.user.id,
-      },
-      include: {
-        _count: {
-          select: { notes: true },
-        },
-      },
-      orderBy: {
-        notes: { _count: "desc" },
-      },
-      take: 10,
-    });
-
-    // Get recently created tags (last 7 days)
-    const sevenDaysAgo = subDays(new Date(), 7);
-    const recentlyCreated = await prisma.tag.findMany({
-      where: {
-        deletedAt: null,
-        userId: session.user.id,
-        createdAt: { gte: sevenDaysAgo },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    });
-
-    // Get tag usage over time (last 30 days)
-    const thirtyDaysAgo = subDays(new Date(), 30);
-    const usageOverTime: Array<{ date: string; count: number }> = [];
-    
-    // Generate daily data points
-    for (let i = 30; i >= 0; i--) {
-      const date = subDays(new Date(), i);
-      const count = await prisma.tag.count({
+    // Run all independent aggregates concurrently instead of serially.
+    const [
+      totalTags,
+      activeTags,
+      archivedTags,
+      orphanedTags,
+      mostUsedTags,
+      recentlyCreated,
+      usageRows,
+      lastWeekCount,
+      previousWeekCount,
+    ] = await Promise.all([
+      prisma.tag.count({ where: baseWhere }),
+      prisma.tag.count({ where: { ...baseWhere, isArchived: false } }),
+      prisma.tag.count({ where: { ...baseWhere, isArchived: true } }),
+      prisma.tag.count({ where: { ...baseWhere, notes: { none: {} } } }),
+      prisma.tag.findMany({
+        where: baseWhere,
+        include: { _count: { select: { notes: true } } },
+        orderBy: { notes: { _count: "desc" } },
+        take: 10,
+      }),
+      prisma.tag.findMany({
+        where: { ...baseWhere, createdAt: { gte: sevenDaysAgo } },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      }),
+      // Single query for the 30-day usage window; bucket by day in memory
+      // rather than issuing one count per day (was 31 serial round-trips).
+      prisma.tag.findMany({
+        where: { ...baseWhere, lastUsed: { gte: thirtyDaysAgo } },
+        select: { lastUsed: true },
+      }),
+      prisma.tag.count({
+        where: { ...baseWhere, createdAt: { gte: sevenDaysAgo } },
+      }),
+      prisma.tag.count({
         where: {
-          deletedAt: null,
-          userId: session.user.id,
-          lastUsed: {
-            gte: format(date, "yyyy-MM-dd"),
-            lt: format(subDays(date, -1), "yyyy-MM-dd"),
-          },
+          ...baseWhere,
+          createdAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo },
         },
-      });
-      usageOverTime.push({
-        date: format(date, "MMM dd"),
-        count,
-      });
+      }),
+    ]);
+
+    // Bucket lastUsed timestamps into per-day counts for the last 31 days.
+    const bucketCounts = new Map<string, number>();
+    for (const row of usageRows) {
+      if (!row.lastUsed) continue;
+      const key = format(row.lastUsed, "yyyy-MM-dd");
+      bucketCounts.set(key, (bucketCounts.get(key) ?? 0) + 1);
     }
 
-    // Get tag growth
-    const lastWeekCount = await prisma.tag.count({
-      where: {
-        deletedAt: null,
-        userId: session.user.id,
-        createdAt: { gte: subDays(new Date(), 7) },
-      },
-    });
-
-    const previousWeekCount = await prisma.tag.count({
-      where: {
-        deletedAt: null,
-        userId: session.user.id,
-        createdAt: {
-          gte: subDays(new Date(), 14),
-          lt: subDays(new Date(), 7),
-        },
-      },
-    });
+    const usageOverTime: Array<{ date: string; count: number }> = [];
+    for (let i = 30; i >= 0; i--) {
+      const date = subDays(now, i);
+      const key = format(date, "yyyy-MM-dd");
+      usageOverTime.push({
+        date: format(date, "MMM dd"),
+        count: bucketCounts.get(key) ?? 0,
+      });
+    }
 
     const percentChange =
       previousWeekCount > 0

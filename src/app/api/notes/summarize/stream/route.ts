@@ -10,6 +10,7 @@ import { auth } from "@/lib/auth";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { generateSummaryStream, generateContentHash, type SummarizationOptions } from "@/lib/ai/summarization-service";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 // Request validation schema
 const streamRequestSchema = z.object({
@@ -37,6 +38,20 @@ export async function POST(request: NextRequest) {
             status: 401,
             headers: { "Content-Type": "application/json" },
         });
+    }
+
+    const rl = checkRateLimit(session.user.id, RATE_LIMITS.ai.limit, RATE_LIMITS.ai.windowMs);
+    if (!rl.success) {
+        return new Response(
+            JSON.stringify({ error: "Too many requests. Please slow down." }),
+            {
+                status: 429,
+                headers: {
+                    "Content-Type": "application/json",
+                    "Retry-After": String(rl.retryAfter),
+                },
+            }
+        );
     }
 
     try {

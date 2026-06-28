@@ -41,15 +41,25 @@ export interface QueueStatus {
 /**
  * Embed a single note
  *
- * 1. Sets status to PROCESSING
+ * 1. Atomically claims the note (compare-and-set status -> PROCESSING)
  * 2. Deletes old vectors if any exist
  * 3. Chunks and upserts new vectors
  * 4. Updates status to READY (or ERROR)
+ *
+ * @param noteId  Note to embed.
+ * @param opts.userId  When provided, ownership is enforced: a note that does
+ *   not belong to this user is treated as "not found". Callers acting on behalf
+ *   of an end user MUST pass this to prevent cross-tenant embedding (IDOR).
  */
-export async function embedNote(noteId: string): Promise<EmbedNoteResult> {
-  // Fetch the note
-  const note = await prisma.note.findUnique({
-    where: { id: noteId },
+export async function embedNote(
+  noteId: string,
+  opts: { userId?: string } = {}
+): Promise<EmbedNoteResult> {
+  const { userId } = opts;
+
+  // Fetch the note, scoped to the owner when a userId is supplied.
+  const note = await prisma.note.findFirst({
+    where: { id: noteId, ...(userId ? { userId } : {}) },
     include: { tags: true },
   });
 
@@ -61,8 +71,18 @@ export async function embedNote(noteId: string): Promise<EmbedNoteResult> {
     };
   }
 
-  // Skip if already being processed
-  if (note.embeddingStatus === EmbeddingStatus.PROCESSING) {
+  // Atomically claim the note: only one worker may transition it into
+  // PROCESSING. This compare-and-set replaces a read-then-write guard that
+  // allowed two concurrent calls to both proceed and produce orphaned chunks.
+  const claim = await prisma.note.updateMany({
+    where: {
+      id: noteId,
+      embeddingStatus: { not: EmbeddingStatus.PROCESSING },
+    },
+    data: { embeddingStatus: EmbeddingStatus.PROCESSING },
+  });
+
+  if (claim.count !== 1) {
     return {
       noteId,
       status: "skipped",
@@ -71,12 +91,6 @@ export async function embedNote(noteId: string): Promise<EmbedNoteResult> {
   }
 
   try {
-    // Mark as processing
-    await prisma.note.update({
-      where: { id: noteId },
-      data: { embeddingStatus: EmbeddingStatus.PROCESSING },
-    });
-
     // Delete existing vectors if any
     if (note.chunkCount && note.chunkCount > 0) {
       await deleteNoteVectors(noteId, note.userId, note.chunkCount);
@@ -147,23 +161,43 @@ export async function embedNote(noteId: string): Promise<EmbedNoteResult> {
 /**
  * Process the embedding queue
  *
- * Finds notes with PENDING or ERROR status and embeds them.
+ * Finds notes with PENDING or ERROR status and embeds them. Also recovers
+ * notes left stuck in PROCESSING (e.g. by a crashed/timed-out invocation)
+ * whose claim is older than STUCK_PROCESSING_MS.
  */
+const STUCK_PROCESSING_MS = 5 * 60 * 1000; // 5 minutes
+
 export async function processEmbeddingQueue(
   limit: number = 10,
   userId?: string
 ): Promise<ProcessQueueResult> {
-  // Find notes that need embedding
+  const stuckBefore = new Date(Date.now() - STUCK_PROCESSING_MS);
+
+  // Find notes that need embedding: PENDING/ERROR, or PROCESSING that has been
+  // stuck past the recovery threshold (lastEmbeddedAt/updatedAt as a proxy for
+  // when the claim was made).
   const notes = await prisma.note.findMany({
     where: {
-      embeddingStatus: {
-        in: [EmbeddingStatus.PENDING, EmbeddingStatus.ERROR],
-      },
-      ...(userId && { userId }),
+      AND: [
+        userId ? { userId } : {},
+        {
+          OR: [
+            {
+              embeddingStatus: {
+                in: [EmbeddingStatus.PENDING, EmbeddingStatus.ERROR],
+              },
+            },
+            {
+              embeddingStatus: EmbeddingStatus.PROCESSING,
+              updatedAt: { lt: stuckBefore },
+            },
+          ],
+        },
+      ],
     },
     orderBy: { updatedAt: "asc" },
     take: limit,
-    select: { id: true },
+    select: { id: true, userId: true, embeddingStatus: true },
   });
 
   const results: EmbedNoteResult[] = [];
@@ -171,7 +205,20 @@ export async function processEmbeddingQueue(
   let failed = 0;
 
   for (const note of notes) {
-    const result = await embedNote(note.id);
+    // Recover stuck PROCESSING notes by resetting them so embedNote's
+    // compare-and-set can re-claim them.
+    if (note.embeddingStatus === EmbeddingStatus.PROCESSING) {
+      await prisma.note.updateMany({
+        where: {
+          id: note.id,
+          embeddingStatus: EmbeddingStatus.PROCESSING,
+          updatedAt: { lt: stuckBefore },
+        },
+        data: { embeddingStatus: EmbeddingStatus.PENDING },
+      });
+    }
+
+    const result = await embedNote(note.id, { userId: note.userId });
     results.push(result);
 
     if (result.status === "success") {

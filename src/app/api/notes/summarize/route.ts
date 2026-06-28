@@ -23,6 +23,8 @@ import {
     type SummarizationOptions,
     type ContextOptions,
 } from "@/lib/ai";
+import { errorResponse } from "@/lib/api-error";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 // Request validation schema with context options
 const summarizeRequestSchema = z.object({
@@ -59,6 +61,9 @@ export async function POST(request: NextRequest) {
     if (!session?.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = enforceRateLimit(session.user.id, RATE_LIMITS.ai);
+    if (limited) return limited;
 
     try {
         const body = await request.json();
@@ -172,10 +177,7 @@ export async function POST(request: NextRequest) {
         });
     } catch (error) {
         console.error("Error generating summary:", error);
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : "Failed to generate summary" },
-            { status: 500 }
-        );
+        return errorResponse("Failed to generate summary", 500, error);
     }
 }
 
@@ -192,6 +194,9 @@ export async function GET(request: NextRequest) {
     if (!session?.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = enforceRateLimit(session.user.id, RATE_LIMITS.ai);
+    if (limited) return limited;
 
     const { searchParams } = new URL(request.url);
     const noteId = searchParams.get("noteId");
@@ -219,9 +224,6 @@ export async function GET(request: NextRequest) {
         });
     } catch (error) {
         console.error("Error generating title:", error);
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : "Failed to generate title" },
-            { status: 500 }
-        );
+        return errorResponse("Failed to generate title", 500, error);
     }
 }

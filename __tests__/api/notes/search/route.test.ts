@@ -5,11 +5,13 @@ import { GET } from "@/app/api/notes/search/route";
 import { NextRequest } from "next/server";
 import "../../../mocks/auth";
 import { setAuthenticatedUser, setUnauthenticatedUser } from "../../../mocks/auth";
-import { searchNotes } from "@/lib/ai/pinecone-service";
+import mockPrismaClient from "../../../mocks/prisma";
+import { searchNotes, checkPineconeHealth } from "@/lib/ai/pinecone-service";
 
 // Mock the pinecone service
 jest.mock("@/lib/ai/pinecone-service", () => ({
   searchNotes: jest.fn(),
+  checkPineconeHealth: jest.fn(() => Promise.resolve({ configured: true, accessible: true })),
 }));
 
 // Mock next/headers
@@ -54,19 +56,31 @@ describe("Search API - GET /api/notes/search", () => {
 
   it("should search notes and return results", async () => {
     setAuthenticatedUser();
-    
-    const mockResults = [
+
+    // searchNotes returns chunk-level matches keyed by noteId
+    const mockChunks = [
+      {
+        noteId: "note1",
+        preview: "Preview text",
+        score: 0.9,
+        chunkText: "matched chunk",
+        chunkIndex: 0,
+      },
+    ];
+    (searchNotes as jest.Mock).mockResolvedValue(mockChunks);
+
+    // The route then loads the full notes from Prisma
+    const now = new Date();
+    mockPrismaClient.note.findMany.mockResolvedValue([
       {
         id: "note1",
         title: "Test Note",
-        score: 0.9,
-        preview: "Preview text",
         tags: [],
-        updatedAt: new Date().toISOString(),
-      }
-    ];
-
-    (searchNotes as jest.Mock).mockResolvedValue(mockResults);
+        contentText: "full text",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
 
     const request = new NextRequest("http://localhost:3000/api/notes/search?q=machine+learning");
     const response = await GET(request);
@@ -74,7 +88,10 @@ describe("Search API - GET /api/notes/search", () => {
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.results).toEqual(mockResults);
+    expect(data.results).toHaveLength(1);
+    expect(data.results[0].id).toBe("note1");
+    expect(data.results[0].title).toBe("Test Note");
+    expect(data.results[0].score).toBe(0.9);
     expect(searchNotes).toHaveBeenCalledWith("test-user-id", "machine learning", 10);
   });
 

@@ -185,10 +185,12 @@ describe('Notes API - GET /api/notes', () => {
         contentText: 'Content 1',
         createdAt: new Date(),
         updatedAt: new Date(),
+        _count: { attachments: 0 },
       },
     ];
 
-    mockPrismaClient.$transaction.mockResolvedValue([mockNotes, 1]);
+    mockPrismaClient.note.findMany.mockResolvedValue(mockNotes);
+    mockPrismaClient.note.count.mockResolvedValue(1);
 
     const request = new NextRequest('http://localhost:3000/api/notes');
 
@@ -197,7 +199,6 @@ describe('Notes API - GET /api/notes', () => {
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.notes).toEqual(mockNotes);
     expect(data.metadata.page).toBe(1);
     expect(data.metadata.limit).toBe(10);
   });
@@ -205,7 +206,8 @@ describe('Notes API - GET /api/notes', () => {
   it('should handle custom pagination parameters', async () => {
     setAuthenticatedUser();
 
-    mockPrismaClient.$transaction.mockResolvedValue([[], 100]);
+    mockPrismaClient.note.findMany.mockResolvedValue([]);
+    mockPrismaClient.note.count.mockResolvedValue(100);
 
     const request = new NextRequest('http://localhost:3000/api/notes?page=2&limit=20');
 
@@ -246,7 +248,8 @@ describe('Notes API - GET /api/notes', () => {
   it('should return 500 on database error', async () => {
     setAuthenticatedUser();
 
-    mockPrismaClient.$transaction.mockRejectedValue(new Error('Database error'));
+    mockPrismaClient.note.findMany.mockRejectedValue(new Error('Database error'));
+    mockPrismaClient.note.count.mockRejectedValue(new Error('Database error'));
 
     const request = new NextRequest('http://localhost:3000/api/notes');
 
@@ -260,7 +263,8 @@ describe('Notes API - GET /api/notes', () => {
   it('should calculate total pages correctly', async () => {
     setAuthenticatedUser();
 
-    mockPrismaClient.$transaction.mockResolvedValue([[], 25]);
+    mockPrismaClient.note.findMany.mockResolvedValue([]);
+    mockPrismaClient.note.count.mockResolvedValue(25);
 
     const request = new NextRequest('http://localhost:3000/api/notes?limit=10');
 

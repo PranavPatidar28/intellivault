@@ -7,7 +7,12 @@ import { Request, Response as NodeFetchResponse, Headers } from 'node-fetch';
 // Create Response with json static method and proper status exposure
 class Response extends NodeFetchResponse {
   constructor(body?: BodyInit | null, init?: ResponseInit) {
-    super(body || undefined, init);
+    // node-fetch's Body/Response init types are narrower than the DOM lib's;
+    // cast to bridge the two definitions in this polyfill.
+    super(
+      (body as unknown as ConstructorParameters<typeof NodeFetchResponse>[0]) || undefined,
+      init as unknown as ConstructorParameters<typeof NodeFetchResponse>[1]
+    );
     // Ensure status is directly accessible
     Object.defineProperty(this, 'status', {
       value: init?.status || 200,
@@ -51,6 +56,18 @@ jest.mock('@/lib/auth', () => ({
 
 // Export mockAuth to be used in tests
 (global as any).mockAuth = mockAuth;
+
+// Mock Prisma globally so route/service modules never construct the real
+// PrismaClient (which throws on missing DATABASE_URL in the test env). The
+// jest.mock factory in __tests__/mocks/prisma.ts is not hoisted above the
+// route imports in each test file, so it must live here in setup to apply
+// before any module under test loads. Tests still import the same
+// mockPrismaClient object to configure return values.
+jest.mock('@/lib/prisma', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { mockPrismaClient } = require('./__tests__/mocks/prisma');
+  return { __esModule: true, default: mockPrismaClient };
+});
 
 // Mock Next.js router
 jest.mock('next/navigation', () => ({

@@ -4,11 +4,21 @@ import { auth } from "@/lib/auth";
 import { headers as nextHeaders } from "next/headers";
 import { z } from "zod";
 import { slugify } from "@/lib/utils/text";
+import { Prisma } from "@/generated/prisma";
 
 const updateTagSchema = z.object({
-  name: z.string().min(1).optional(),
-  color: z.string().optional(),
+  name: z.string().min(1).max(100).optional(),
+  color: z.string().max(50).optional(),
 });
+
+// Prisma throws P2025 when an update/delete matches no row (e.g. wrong id or
+// not owned by this user). Surface that as 404 rather than a generic 500.
+function isRecordNotFound(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2025"
+  );
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -26,9 +36,17 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const validated = updateTagSchema.parse(body);
+    const parsed = updateTagSchema.safeParse(body);
 
-    const updateData: any = {};
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.issues },
+        { status: 400 }
+      );
+    }
+    const validated = parsed.data;
+
+    const updateData: Prisma.TagUpdateInput = {};
     if (validated.name) {
       updateData.name = validated.name;
       updateData.slug = slugify(validated.name);
@@ -38,7 +56,7 @@ export async function PATCH(
     }
 
     const tag = await prisma.tag.update({
-      where: { 
+      where: {
         id,
         userId: session.user.id,
       },
@@ -64,6 +82,9 @@ export async function PATCH(
       },
     });
   } catch (error) {
+    if (isRecordNotFound(error)) {
+      return NextResponse.json({ error: "Tag not found" }, { status: 404 });
+    }
     console.error("Error updating tag:", error);
     return NextResponse.json(
       { error: "Failed to update tag" },
@@ -89,7 +110,7 @@ export async function DELETE(
   try {
     // Soft delete by setting deletedAt
     const tag = await prisma.tag.update({
-      where: { 
+      where: {
         id,
         userId: session.user.id,
       },
@@ -103,6 +124,9 @@ export async function DELETE(
       tag,
     });
   } catch (error) {
+    if (isRecordNotFound(error)) {
+      return NextResponse.json({ error: "Tag not found" }, { status: 404 });
+    }
     console.error("Error deleting tag:", error);
     return NextResponse.json(
       { error: "Failed to delete tag" },

@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { headers as nextHeaders } from "next/headers";
+import { z } from "zod";
+import type { Prisma } from "@/generated/prisma";
+
+const tagQuerySchema = z.object({
+  q: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  page: z.coerce.number().int().min(1).default(1),
+  sort: z
+    .enum(["usageCount", "name", "createdAt", "lastUsed", "updatedAt"])
+    .default("usageCount"),
+  order: z.enum(["asc", "desc"]).default("desc"),
+  // Query-string booleans: only the literal "true" is truthy (matching the
+  // prior `=== "true"` behavior). z.coerce.boolean() would treat "false" as
+  // true since it is a non-empty string.
+  deleted: z.string().optional().transform((v) => v === "true"),
+  favorites: z.string().optional().transform((v) => v === "true"),
+  archived: z.string().optional().transform((v) => v === "true"),
+  orphaned: z.string().optional().transform((v) => v === "true"),
+});
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({
@@ -14,19 +33,32 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const q = searchParams.get("q");
-    const limit = parseInt(searchParams.get("limit") || "10");
-    const page = parseInt(searchParams.get("page") || "1");
-    const sort = searchParams.get("sort") || "usageCount";
-    const order = searchParams.get("order") || "desc";
-    const showDeleted = searchParams.get("deleted") === "true";
-    const favorites = searchParams.get("favorites") === "true";
-    const archived = searchParams.get("archived") === "true";
-    const orphaned = searchParams.get("orphaned") === "true";
+    const parsed = tagQuerySchema.safeParse(
+      Object.fromEntries(searchParams.entries())
+    );
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const {
+      q,
+      limit,
+      page,
+      sort,
+      order,
+      deleted: showDeleted,
+      favorites,
+      archived,
+      orphaned,
+    } = parsed.data;
 
     const skip = (page - 1) * limit;
 
-    const where: any = {
+    const where: Prisma.TagWhereInput = {
       userId: session.user.id,
       deletedAt: showDeleted ? undefined : null,
     };
@@ -50,12 +82,10 @@ export async function GET(request: NextRequest) {
       where.notes = { none: {} };
     }
 
-    let orderBy: any = {};
-    if (sort === "usageCount") {
-      orderBy = { notes: { _count: order } };
-    } else {
-      orderBy = { [sort]: order };
-    }
+    const orderBy: Prisma.TagOrderByWithRelationInput =
+      sort === "usageCount"
+        ? { notes: { _count: order } }
+        : { [sort]: order };
 
     const [tags, total] = await prisma.$transaction([
       prisma.tag.findMany({

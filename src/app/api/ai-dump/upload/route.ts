@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers as nextHeaders } from "next/headers";
 import { auth } from "@/lib/auth";
 import { extractText } from "unpdf";
+import { errorResponse } from "@/lib/api-error";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 type MammothLib = { extractRawText: (opts: { buffer: Buffer }) => Promise<{ value: string }> };
 
@@ -52,6 +54,9 @@ export async function POST(request: NextRequest) {
     if (!session?.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = enforceRateLimit(session.user.id, RATE_LIMITS.upload);
+    if (limited) return limited;
 
     try {
         const formData = await request.formData();
@@ -111,10 +116,7 @@ export async function POST(request: NextRequest) {
         });
     } catch (error) {
         console.error("File processing error:", error);
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : "Failed to process file" },
-            { status: 500 }
-        );
+        return errorResponse("Failed to process file", 500, error);
     }
 }
 

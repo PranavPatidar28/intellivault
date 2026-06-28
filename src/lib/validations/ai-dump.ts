@@ -32,7 +32,9 @@ export const aiDumpTogglesSchema = z.object({
 
 export const aiDumpOptionsSchema = z.object({
     template: aiDumpTemplateSchema.default("auto"),
-    toggles: aiDumpTogglesSchema.default({}),
+    // prefault (not default): applies {} as input so the nested field defaults
+    // fill in. default() is typed against the full output type in Zod v4.
+    toggles: aiDumpTogglesSchema.prefault({}),
     tone: aiDumpToneSchema.default("balanced"),
     temperature: z.number().min(0).max(1).default(0.2),
 });
@@ -48,7 +50,7 @@ export const createAIDumpSchema = z
         source: z
             .enum(["webclipper", "upload", "clipboard", "paste"])
             .default("paste"),
-        options: aiDumpOptionsSchema.default({}),
+        options: aiDumpOptionsSchema.prefault({}),
         metadata: z
             .object({
                 originalFilename: z.string().optional(),

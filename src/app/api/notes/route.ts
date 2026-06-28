@@ -6,6 +6,9 @@ import { createNoteSchema, noteQuerySchema } from "@/lib/validations/note";
 
 import { slugify } from "@/lib/utils/text";
 
+// Per-user cap on notes to bound storage/abuse. Adjust as product needs grow.
+const MAX_NOTES_PER_USER = 10_000;
+
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({
     headers: await nextHeaders(),
@@ -23,6 +26,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Validation failed", details: result.error.issues },
         { status: 400 }
+      );
+    }
+
+    // Enforce a per-user note quota.
+    const noteCount = await prisma.note.count({
+      where: { userId: session.user.id },
+    });
+    if (noteCount >= MAX_NOTES_PER_USER) {
+      return NextResponse.json(
+        { error: `Note limit reached (${MAX_NOTES_PER_USER}). Delete some notes to create more.` },
+        { status: 429 }
       );
     }
 
@@ -59,7 +73,7 @@ export async function POST(request: NextRequest) {
     // Trigger embedding in background (fire and forget pattern)
     // We catch errors so we don't block the UI response
     import("@/lib/ai/embedding-sync").then(({ embedNote }) => {
-      embedNote(note.id).catch((err: unknown) =>
+      embedNote(note.id, { userId: session.user.id }).catch((err: unknown) =>
         console.error(`Failed to auto-embed note ${note.id}:`, err)
       );
     });
@@ -95,9 +109,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
+    // Pass undefined (not null) for absent params: z.coerce.number() coerces
+    // null -> 0, which fails .positive() and skips the default. undefined lets
+    // the schema default apply.
     const result = noteQuerySchema.safeParse({
-      page: searchParams.get("page"),
-      limit: searchParams.get("limit"),
+      page: searchParams.get("page") ?? undefined,
+      limit: searchParams.get("limit") ?? undefined,
     });
 
     if (!result.success) {

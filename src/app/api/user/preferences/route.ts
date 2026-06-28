@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
-import { DEFAULT_PREFERENCES, type UserPreferencesUpdate } from "@/types/settings";
+import { DEFAULT_PREFERENCES } from "@/types/settings";
+import { updatePreferencesSchema } from "@/lib/validations/preferences";
 
 /**
  * GET /api/user/preferences
@@ -48,10 +49,19 @@ export async function PATCH(request: Request) {
         const session = await requireAuth();
         const userId = session.user.id;
 
-        const body: UserPreferencesUpdate = await request.json();
+        const body = await request.json();
 
-        // Remove any fields that shouldn't be updated directly
-        const { ...updateData } = body;
+        // Validate against a strict whitelist; reject unknown keys so the
+        // client cannot mass-assign columns like id/userId/createdAt.
+        const parsed = updatePreferencesSchema.safeParse(body);
+        if (!parsed.success) {
+            return NextResponse.json(
+                { error: "Validation failed", details: parsed.error.issues },
+                { status: 400 }
+            );
+        }
+
+        const updateData = parsed.data;
 
         // Upsert preferences
         const preferences = await prisma.userPreferences.upsert({

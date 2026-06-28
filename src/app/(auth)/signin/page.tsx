@@ -30,6 +30,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ContinueWithGoogle } from "../_components/continueWithGoogle";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { sanitizeCallbackUrl } from "@/lib/safe-redirect";
 
 const SignInSchema = z.object({
   email: z
@@ -50,6 +51,16 @@ export default function SignInPage() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [isAlreadyAuthenticated, setIsAlreadyAuthenticated] = useState(false);
+  // Where to send the user after login. Read from the ?callbackUrl= param the
+  // middleware sets, sanitized to a same-origin path to prevent open redirects.
+  const [callbackUrl, setCallbackUrl] = useState("/");
+
+  // Read callbackUrl from the URL on mount (via window to avoid forcing this
+  // static page into dynamic rendering with useSearchParams).
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("callbackUrl");
+    setCallbackUrl(sanitizeCallbackUrl(param));
+  }, []);
 
   const form = useForm<SignInForm>({
     resolver: zodResolver(SignInSchema),
@@ -89,14 +100,14 @@ export default function SignInPage() {
       const result = await authClient.signIn.email({
         email: data.email,
         password: data.password,
-        callbackURL: "/",
+        callbackURL: callbackUrl,
       });
 
       if (result.error) {
         setAuthError(result.error.message || "Sign in failed. Please try again.");
       } else {
-        // Successful sign in - redirect will be handled by the auth client
-        router.push("/");
+        // Successful sign in - redirect to the (sanitized) callback target
+        router.push(callbackUrl);
       }
     } catch (error) {
       console.error("Sign in error:", error);
@@ -149,7 +160,7 @@ export default function SignInPage() {
           </CardContent>
           <CardFooter className="flex flex-col gap-2">
             <Button
-              onClick={() => router.push("/")}
+              onClick={() => router.push(callbackUrl)}
               className="w-full"
               size="lg"
             >
@@ -255,7 +266,7 @@ export default function SignInPage() {
             </div>
           </div>
 
-          <ContinueWithGoogle />
+          <ContinueWithGoogle callbackURL={callbackUrl} />
         </CardContent>
 
         <CardFooter className="flex flex-col gap-2">

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Image from "next/image"
 import { FileType } from "@/generated/prisma/client"
 import {
     FileVideo,
@@ -16,6 +15,7 @@ import {
 } from "lucide-react"
 import type { MediaItem } from "@/hooks/use-media"
 import { cn } from "@/lib/utils"
+import { getFileContentUrl } from "@/lib/upload/file-types"
 
 interface MediaCardProps {
     item: MediaItem
@@ -108,13 +108,15 @@ export function MediaCard({
             <div className="relative aspect-square overflow-hidden rounded-t-lg bg-muted">
                 {showThumbnail ? (
                     <>
-                        <Image
-                            src={item.url}
+                        {/* Plain <img> (not next/image): the proxy is cookie-
+                            authenticated, but next/image's optimizer fetches
+                            server-side without the user's cookie and would 401. */}
+                        <img
+                            src={getFileContentUrl(item.id)}
                             alt={item.filename}
-                            fill
-                            className="object-cover"
+                            className="absolute inset-0 h-full w-full object-cover"
                             onError={() => setImageError(true)}
-                            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+                            loading="lazy"
                         />
                         {isVideo && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -140,7 +142,7 @@ export function MediaCard({
             {/* Action buttons */}
             <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                 <a
-                    href={item.url}
+                    href={getFileContentUrl(item.id)}
                     download={item.filename}
                     onClick={(e) => e.stopPropagation()}
                     className="rounded-full bg-background/80 p-1.5 hover:bg-background shadow-sm"

@@ -93,7 +93,10 @@ export async function DELETE(request: NextRequest) {
     } catch (error) {
         console.error("[Files API] Error deleting file:", error);
 
-        const message = error instanceof Error ? error.message : "Failed to delete file";
+        const message =
+            process.env.NODE_ENV !== "production" && error instanceof Error
+                ? error.message
+                : "Failed to delete file";
 
         return NextResponse.json(
             { success: false, error: message },

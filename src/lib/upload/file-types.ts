@@ -1,4 +1,15 @@
 /**
+ * Build the owner-scoped proxy URL for an attachment's bytes.
+ *
+ * Prefer this over a raw blob URL when rendering/downloading a user's own
+ * files: it routes through GET /api/files/[id]/content, which enforces session
+ * ownership before serving.
+ */
+export function getFileContentUrl(attachmentId: string): string {
+    return `/api/files/${attachmentId}/content`;
+}
+
+/**
  * File type definitions and validation utilities for media uploads
  */
 
@@ -16,14 +27,15 @@ interface FileTypeConfig {
  */
 export const FILE_TYPE_CONFIG: Record<FileCategory, FileTypeConfig> = {
     IMAGE: {
+        // SVG is intentionally excluded: blobs are served from a public URL and
+        // a scripted SVG opened directly is an XSS / phishing-hosting vector.
         mimeTypes: [
             "image/jpeg",
             "image/png",
             "image/gif",
             "image/webp",
-            "image/svg+xml",
         ],
-        extensions: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"],
+        extensions: [".jpg", ".jpeg", ".png", ".gif", ".webp"],
         maxSize: 5 * 1024 * 1024, // 5MB
         accept: "image/*",
     },

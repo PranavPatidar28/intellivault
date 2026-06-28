@@ -9,6 +9,7 @@ describe("Embedding Sync Service", () => {
   // Define mocks inline
   const mockNote = {
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     findMany: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
@@ -43,6 +44,7 @@ describe("Embedding Sync Service", () => {
       env: {
         PINECONE_API_KEY: "test-api-key",
         PINECONE_INDEX_HOST: "https://test-index.pinecone.io",
+        PINECONE_INDEX_NAME: "test-index",
       },
     }));
 
@@ -94,7 +96,8 @@ describe("Embedding Sync Service", () => {
     };
 
     it("should embed a note successfully", async () => {
-      mockNote.findUnique.mockResolvedValueOnce(testNote);
+      mockNote.findFirst.mockResolvedValueOnce(testNote);
+      mockNote.updateMany.mockResolvedValueOnce({ count: 1 }); // claim
       mockNote.update.mockResolvedValue({
         ...testNote,
         embeddingStatus: "READY",
@@ -106,19 +109,37 @@ describe("Embedding Sync Service", () => {
       expect(result.noteId).toBe("note123");
       expect(result.chunkCount).toBeGreaterThanOrEqual(1);
 
-      // Should update status to PROCESSING first
-      expect(mockNote.update).toHaveBeenCalledWith(
+      // Should atomically claim the note by transitioning it to PROCESSING
+      expect(mockNote.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: "note123" },
-          data: expect.objectContaining({
-            embeddingStatus: "PROCESSING",
+          where: expect.objectContaining({
+            id: "note123",
+            embeddingStatus: { not: "PROCESSING" },
+          }),
+          data: { embeddingStatus: "PROCESSING" },
+        })
+      );
+    });
+
+    it("should enforce ownership when userId is provided", async () => {
+      mockNote.findFirst.mockResolvedValueOnce(null);
+
+      const result = await embedNote("note123", { userId: "other-user" });
+
+      expect(result.status).toBe("error");
+      expect(result.error).toBe("Note not found");
+      expect(mockNote.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: "note123",
+            userId: "other-user",
           }),
         })
       );
     });
 
     it("should return error if note not found", async () => {
-      mockNote.findUnique.mockResolvedValueOnce(null);
+      mockNote.findFirst.mockResolvedValueOnce(null);
 
       const result = await embedNote("nonexistent");
 
@@ -127,10 +148,11 @@ describe("Embedding Sync Service", () => {
     });
 
     it("should skip if note is already being processed", async () => {
-      mockNote.findUnique.mockResolvedValueOnce({
+      mockNote.findFirst.mockResolvedValueOnce({
         ...testNote,
         embeddingStatus: "PROCESSING",
       });
+      mockNote.updateMany.mockResolvedValueOnce({ count: 0 }); // claim fails
 
       const result = await embedNote("note123");
 
@@ -139,10 +161,11 @@ describe("Embedding Sync Service", () => {
     });
 
     it("should delete existing vectors before re-embedding", async () => {
-      mockNote.findUnique.mockResolvedValueOnce({
+      mockNote.findFirst.mockResolvedValueOnce({
         ...testNote,
         chunkCount: 3,
       });
+      mockNote.updateMany.mockResolvedValueOnce({ count: 1 }); // claim
       mockNote.update.mockResolvedValue(testNote);
 
       await embedNote("note123");
@@ -156,7 +179,8 @@ describe("Embedding Sync Service", () => {
     });
 
     it("should mark note as ERROR on failure", async () => {
-      mockNote.findUnique.mockResolvedValueOnce(testNote);
+      mockNote.findFirst.mockResolvedValueOnce(testNote);
+      mockNote.updateMany.mockResolvedValueOnce({ count: 1 }); // claim
       mockNote.update.mockResolvedValue(testNote);
       mockNamespace.upsertRecords.mockRejectedValueOnce(new Error("Pinecone failed"));
 
@@ -176,12 +200,12 @@ describe("Embedding Sync Service", () => {
   describe("processEmbeddingQueue", () => {
     it("should process pending notes", async () => {
       mockNote.findMany.mockResolvedValueOnce([
-        { id: "note1" },
-        { id: "note2" },
+        { id: "note1", userId: "user1", embeddingStatus: "PENDING" },
+        { id: "note2", userId: "user1", embeddingStatus: "PENDING" },
       ]);
 
-      // Mock embedNote for each note
-      mockNote.findUnique
+      // Mock embedNote's findFirst + claim for each note
+      mockNote.findFirst
         .mockResolvedValueOnce({
           id: "note1",
           userId: "user1",
@@ -201,6 +225,7 @@ describe("Embedding Sync Service", () => {
           tags: [],
         });
 
+      mockNote.updateMany.mockResolvedValue({ count: 1 });
       mockNote.update.mockResolvedValue({});
 
       const result = await processEmbeddingQueue(10, "user1");
@@ -210,8 +235,10 @@ describe("Embedding Sync Service", () => {
     });
 
     it("should respect limit parameter", async () => {
-      mockNote.findMany.mockResolvedValueOnce([{ id: "note1" }]);
-      mockNote.findUnique.mockResolvedValueOnce({
+      mockNote.findMany.mockResolvedValueOnce([
+        { id: "note1", userId: "user1", embeddingStatus: "PENDING" },
+      ]);
+      mockNote.findFirst.mockResolvedValueOnce({
         id: "note1",
         userId: "user1",
         title: "Note 1",
@@ -220,6 +247,7 @@ describe("Embedding Sync Service", () => {
         chunkCount: null,
         tags: [],
       });
+      mockNote.updateMany.mockResolvedValue({ count: 1 });
       mockNote.update.mockResolvedValue({});
 
       await processEmbeddingQueue(1);
@@ -239,7 +267,9 @@ describe("Embedding Sync Service", () => {
       expect(mockNote.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            userId: "specific-user",
+            AND: expect.arrayContaining([
+              expect.objectContaining({ userId: "specific-user" }),
+            ]),
           }),
         })
       );
