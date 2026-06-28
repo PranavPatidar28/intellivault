@@ -1,4 +1,15 @@
 /**
+ * Build the owner-scoped proxy URL for an attachment's bytes.
+ *
+ * Prefer this over a raw blob URL when rendering/downloading a user's own
+ * files: it routes through GET /api/files/[id]/content, which enforces session
+ * ownership before serving.
+ */
+export function getFileContentUrl(attachmentId: string): string {
+    return `/api/files/${attachmentId}/content`;
+}
+
+/**
  * File type definitions and validation utilities for media uploads
  */
 

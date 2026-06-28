@@ -36,7 +36,7 @@ import {
     Copy
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import Image from "next/image"
+import { getFileContentUrl } from "@/lib/upload/file-types"
 
 interface MediaPickerProps {
     isOpen: boolean
@@ -97,13 +97,12 @@ function MediaPickerItem({
             {/* Thumbnail / Icon */}
             <div className="aspect-square bg-muted flex items-center justify-center relative">
                 {isImage && !imageError ? (
-                    <Image
-                        src={item.url}
+                    <img
+                        src={getFileContentUrl(item.id)}
                         alt={item.filename}
-                        fill
-                        className="object-cover"
+                        className="absolute inset-0 h-full w-full object-cover"
                         onError={() => setImageError(true)}
-                        sizes="120px"
+                        loading="lazy"
                     />
                 ) : (
                     <Icon className="h-10 w-10 text-muted-foreground" />

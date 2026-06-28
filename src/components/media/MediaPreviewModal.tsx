@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Download, Trash2, X, Pencil, Check, FileText, Loader2 } from "lucide-react"
 import type { MediaItem } from "@/hooks/use-media"
 import { cn } from "@/lib/utils"
+import { getFileContentUrl } from "@/lib/upload/file-types"
 
 interface NoteLink {
     id: string
@@ -95,12 +96,14 @@ export function MediaPreviewModal({
 
     if (!item) return null
 
+    const contentUrl = getFileContentUrl(item.id)
+
     const renderPreview = () => {
         switch (item.fileType) {
             case "IMAGE":
                 return (
                     <img
-                        src={item.url}
+                        src={contentUrl}
                         alt={item.filename}
                         className="max-h-[70vh] max-w-full object-contain rounded-lg"
                     />
@@ -108,7 +111,7 @@ export function MediaPreviewModal({
             case "VIDEO":
                 return (
                     <video
-                        src={item.url}
+                        src={contentUrl}
                         controls
                         autoPlay
                         className="max-h-[70vh] max-w-full rounded-lg"
@@ -120,7 +123,7 @@ export function MediaPreviewModal({
                 return (
                     <div className="w-full max-w-md p-8 bg-muted rounded-lg">
                         <audio
-                            src={item.url}
+                            src={contentUrl}
                             controls
                             autoPlay
                             className="w-full"
@@ -133,7 +136,7 @@ export function MediaPreviewModal({
                 if (item.mimeType === "application/pdf") {
                     return (
                         <iframe
-                            src={item.url}
+                            src={contentUrl}
                             className="h-[70vh] w-full max-w-4xl rounded-lg"
                             title={item.filename}
                         />
@@ -143,7 +146,7 @@ export function MediaPreviewModal({
                     <div className="p-8 bg-muted rounded-lg text-center">
                         <p className="text-lg font-medium mb-4">{item.filename}</p>
                         <a
-                            href={item.url}
+                            href={contentUrl}
                             download={item.filename}
                             className="text-primary hover:underline"
                         >
@@ -230,7 +233,7 @@ export function MediaPreviewModal({
 
                     <div className="flex items-center gap-2 ml-4">
                         <Button variant="outline" size="sm" asChild>
-                            <a href={item.url} download={item.filename}>
+                            <a href={contentUrl} download={item.filename}>
                                 <Download className="h-4 w-4 mr-1" />
                                 Download
                             </a>
