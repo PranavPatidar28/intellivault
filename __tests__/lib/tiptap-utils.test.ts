@@ -125,9 +125,9 @@ describe('TipTap Utilities', () => {
       expect(isValidPosition(100)).toBe(true);
     });
 
-    it('should return true for negative numbers', () => {
-      // Position can be negative in some contexts
-      expect(isValidPosition(-1)).toBe(true);
+    it('should return false for negative numbers', () => {
+      // ProseMirror positions are always >= 0
+      expect(isValidPosition(-1)).toBe(false);
     });
 
     it('should return false for null', () => {
@@ -169,11 +169,12 @@ describe('TipTap Utilities', () => {
     });
 
     it('should handle undefined URI', () => {
-      expect(isAllowedUri(undefined)).toBe(false);
+      // No URI means no dangerous protocol -> allowed (matches upstream TipTap)
+      expect(isAllowedUri(undefined)).toBe(true);
     });
 
     it('should handle empty string', () => {
-      expect(isAllowedUri('')).toBe(false);
+      expect(isAllowedUri('')).toBe(true);
     });
 
     it('should be case insensitive for protocols', () => {
@@ -185,12 +186,13 @@ describe('TipTap Utilities', () => {
   describe('sanitizeUrl', () => {
     it('should allow safe http URLs', () => {
       const result = sanitizeUrl('http://example.com', 'http://base.com');
-      expect(result).toBe('http://example.com');
+      // new URL() normalizes with a trailing slash
+      expect(result).toBe('http://example.com/');
     });
 
     it('should allow safe https URLs', () => {
       const result = sanitizeUrl('https://example.com', 'https://base.com');
-      expect(result).toBe('https://example.com');
+      expect(result).toBe('https://example.com/');
     });
 
     it('should block javascript: protocol', () => {

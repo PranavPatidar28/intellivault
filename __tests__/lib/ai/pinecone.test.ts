@@ -7,19 +7,18 @@
 import { getUserNamespace, getChunkId, parseChunkId } from "@/lib/ai/pinecone";
 
 describe("getUserNamespace", () => {
-  it("should generate a namespace with user_ prefix", () => {
-    const namespace = getUserNamespace("user123");
-    expect(namespace).toBe("user_user123");
+  // Vectors live in a single shared "notes" namespace; per-user isolation is
+  // enforced by userId metadata, not by separate namespaces.
+  it("should return the shared notes namespace", () => {
+    expect(getUserNamespace("user123")).toBe("notes");
   });
 
-  it("should handle cuid-style user IDs", () => {
-    const namespace = getUserNamespace("clx1234567890abcdefghij");
-    expect(namespace).toBe("user_clx1234567890abcdefghij");
+  it("should return the shared namespace for cuid-style user IDs", () => {
+    expect(getUserNamespace("clx1234567890abcdefghij")).toBe("notes");
   });
 
-  it("should handle empty string", () => {
-    const namespace = getUserNamespace("");
-    expect(namespace).toBe("user_");
+  it("should return the shared namespace for empty string", () => {
+    expect(getUserNamespace("")).toBe("notes");
   });
 });
 

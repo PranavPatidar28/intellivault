@@ -44,6 +44,7 @@ describe("Embedding Sync Service", () => {
       env: {
         PINECONE_API_KEY: "test-api-key",
         PINECONE_INDEX_HOST: "https://test-index.pinecone.io",
+        PINECONE_INDEX_NAME: "test-index",
       },
     }));
 

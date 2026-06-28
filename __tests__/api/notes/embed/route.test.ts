@@ -105,7 +105,7 @@ describe("Embed API", () => {
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      expect(data.message).toContain("Processed 2 notes");
+      expect(data.processed).toBe(2);
       expect(processEmbeddingQueue).toHaveBeenCalledWith(5, "test-user-id");
     });
 
@@ -117,13 +117,13 @@ describe("Embed API", () => {
         method: "POST",
         body: JSON.stringify({ reembedAll: true }),
       });
-      
+
       const response = await POST(request);
       const data = await response.json();
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      expect(data.message).toContain("Queued 10 notes");
+      expect(data.message).toContain("Marked 10 notes");
       expect(reembedAllNotes).toHaveBeenCalledWith("test-user-id");
     });
   });

@@ -88,8 +88,9 @@ describe('Text Utilities', () => {
     it('should truncate text longer than max length', () => {
       const text = 'This is a very long text that should be truncated';
       const result = truncateText(text, 20);
+      // substring(0,20) is "This is a very long " which trims to 19 chars + "..."
       expect(result).toBe('This is a very long...');
-      expect(result.length).toBe(23); // 20 chars + "..."
+      expect(result.length).toBe(22);
     });
 
     it('should use default max length of 150', () => {
