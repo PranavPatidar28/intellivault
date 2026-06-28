@@ -38,6 +38,25 @@ type SectionType = "titles" | "tags" | "markdown" | "actions";
 interface RegenerateOptions {
     temperature?: number;
     tone?: "balanced" | "formal" | "casual" | "technical";
+    /** Free-form refinement instruction (markdown section only). */
+    instruction?: string;
+}
+
+interface CreateAIDumpExtras {
+    /** base64 data-URL of an uploaded image, for multimodal processing. */
+    imageData?: string;
+    /** Origin of the content, for provenance. */
+    source?: "webclipper" | "upload" | "clipboard" | "paste";
+}
+
+/** Summary row for the drafts list (GET /api/ai-dump). */
+export interface DraftSummary {
+    id: string;
+    title: string;
+    tldr: string | null;
+    source: string | null;
+    createdAt: string;
+    updatedAt: string;
 }
 
 interface FinalizeOptions {
@@ -54,6 +73,8 @@ interface UseAIDumpReturn {
     isRegenerating: Record<SectionType, boolean>;
     error: string | null;
     streamingStatus: string | null;
+    /** Non-fatal warning surfaced during processing (e.g. content truncated). */
+    warning: string | null;
 
     // Selected values for finalization
     selectedTitle: string;
@@ -62,7 +83,8 @@ interface UseAIDumpReturn {
     // Actions
     createAIDump: (
         content: string,
-        options?: Partial<AIDumpOptions>
+        options?: Partial<AIDumpOptions>,
+        extras?: CreateAIDumpExtras
     ) => Promise<boolean>;
     regenerateSection: (
         section: SectionType,
@@ -71,6 +93,7 @@ interface UseAIDumpReturn {
     finalize: (options?: Partial<FinalizeOptions>) => Promise<string | null>;
     loadDraft: (noteId: string) => Promise<boolean>;
     deleteDraft: (noteId: string) => Promise<boolean>;
+    listDrafts: () => Promise<DraftSummary[]>;
 
     // Selection handlers
     setSelectedTitle: (title: string) => void;
@@ -120,6 +143,7 @@ export function useAIDump(): UseAIDumpReturn {
     const [selectedTitle, setSelectedTitle] = useState<string>("");
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [streamingStatus, setStreamingStatus] = useState<string | null>(null);
+    const [warning, setWarning] = useState<string | null>(null);
 
     /**
      * Create a new AI Dump from content with streaming
@@ -127,10 +151,12 @@ export function useAIDump(): UseAIDumpReturn {
     const createAIDump = useCallback(
         async (
             content: string,
-            options?: Partial<AIDumpOptions>
+            options?: Partial<AIDumpOptions>,
+            extras?: CreateAIDumpExtras
         ): Promise<boolean> => {
             setIsProcessing(true);
             setError(null);
+            setWarning(null);
             setStreamingStatus("Connecting...");
 
             // Initialize partial state for progressive updates
@@ -149,7 +175,8 @@ export function useAIDump(): UseAIDumpReturn {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         content,
-                        source: "paste",
+                        source: extras?.source ?? "paste",
+                        imageData: extras?.imageData,
                         options: { ...DEFAULT_OPTIONS, ...options },
                     }),
                 });
@@ -239,8 +266,11 @@ export function useAIDump(): UseAIDumpReturn {
                                     setAIDump((prev) => prev ? { ...prev, reasoning } : null);
                                     break;
                                 case "note_created":
-                                    noteId = event.data.noteId;
+                                    noteId = event.data?.noteId ?? "";
                                     setAIDump((prev) => prev ? { ...prev, noteId } : null);
+                                    break;
+                                case "warning":
+                                    setWarning(typeof event.data === "string" ? event.data : null);
                                     break;
                                 case "error":
                                     throw new Error(event.data);
@@ -306,9 +336,22 @@ export function useAIDump(): UseAIDumpReturn {
                 setError("No AI Dump to regenerate");
                 return false;
             }
+            if (!aiDump.noteId) {
+                const msg =
+                    "This draft wasn't saved on the server yet, so it can't be regenerated. Try running the AI Dump again.";
+                setError(msg);
+                toast({
+                    title: "Cannot regenerate",
+                    description: msg,
+                    variant: "destructive",
+                });
+                return false;
+            }
 
             setIsRegenerating((prev) => ({ ...prev, [section]: true }));
             setError(null);
+
+            const { instruction, ...regenOptions } = options ?? {};
 
             try {
                 const response = await fetch(
@@ -316,7 +359,11 @@ export function useAIDump(): UseAIDumpReturn {
                     {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ section, options }),
+                        body: JSON.stringify({
+                            section,
+                            instruction,
+                            options: regenOptions,
+                        }),
                     }
                 );
 
@@ -336,7 +383,13 @@ export function useAIDump(): UseAIDumpReturn {
                     }
                     if (data.updatedSection.tags) {
                         updated.tags = data.updatedSection.tags;
-                        setSelectedTags(data.updatedSection.tags.map((t: TagWithConfidence) => t.name));
+                        // Only reset the user's tag selection when tags were the
+                        // section actually regenerated.
+                        if (section === "tags") {
+                            setSelectedTags(
+                                data.updatedSection.tags.map((t: TagWithConfidence) => t.name)
+                            );
+                        }
                     }
                     if (data.updatedSection.markdown) {
                         updated.markdown = data.updatedSection.markdown;
@@ -378,6 +431,17 @@ export function useAIDump(): UseAIDumpReturn {
         async (options?: Partial<FinalizeOptions>): Promise<string | null> => {
             if (!aiDump) {
                 setError("No AI Dump to finalize");
+                return null;
+            }
+            if (!aiDump.noteId) {
+                const msg =
+                    "This draft wasn't saved on the server yet, so it can't be finalized. Try running the AI Dump again.";
+                setError(msg);
+                toast({
+                    title: "Cannot save note",
+                    description: msg,
+                    variant: "destructive",
+                });
                 return null;
             }
 
@@ -448,13 +512,17 @@ export function useAIDump(): UseAIDumpReturn {
 
                 const note = data.note;
 
-                setAIDump({
-                    noteId: note.id,
-                    titles: note.titles || [],
-                    tags: note.tags?.map((t: { name: string }) => ({
+                const loadedTitles: TitleVariant[] = note.titles || [];
+                const loadedTags: TagWithConfidence[] =
+                    note.tags?.map((t: { name: string }) => ({
                         name: t.name,
                         confidence: 1,
-                    })) || [],
+                    })) || [];
+
+                setAIDump({
+                    noteId: note.id,
+                    titles: loadedTitles,
+                    tags: loadedTags,
                     tldr: note.tldr || "",
                     summary: note.summary || "",
                     markdown: note.generatedMd || "",
@@ -462,6 +530,16 @@ export function useAIDump(): UseAIDumpReturn {
                     rawText: note.rawText || "",
                     status: note.status === "FINAL" ? "final" : "draft",
                 });
+
+                // Restore selections so the resumed draft shows its title/tags
+                // instead of defaulting to "Untitled" with nothing selected.
+                setSelectedTitle(
+                    note.title ||
+                        loadedTitles.find((t) => t.variant === "short")?.text ||
+                        loadedTitles[0]?.text ||
+                        ""
+                );
+                setSelectedTags(loadedTags.map((t) => t.name));
 
                 return true;
             } catch (err) {
@@ -516,6 +594,23 @@ export function useAIDump(): UseAIDumpReturn {
     );
 
     /**
+     * List the user's saved drafts (most recent first).
+     */
+    const listDrafts = useCallback(async (): Promise<DraftSummary[]> => {
+        try {
+            const response = await fetch("/api/ai-dump?limit=20");
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to load drafts");
+            }
+            return (data.notes as DraftSummary[]) ?? [];
+        } catch (err) {
+            console.error("Failed to list drafts:", err);
+            return [];
+        }
+    }, []);
+
+    /**
      * Toggle a tag selection
      */
     const toggleTag = useCallback((tag: string) => {
@@ -539,6 +634,7 @@ export function useAIDump(): UseAIDumpReturn {
             actions: false,
         });
         setError(null);
+        setWarning(null);
         setSelectedTitle("");
         setSelectedTags([]);
     }, []);
@@ -549,6 +645,7 @@ export function useAIDump(): UseAIDumpReturn {
         isRegenerating,
         error,
         streamingStatus,
+        warning,
         selectedTitle,
         selectedTags,
         createAIDump,
@@ -556,6 +653,7 @@ export function useAIDump(): UseAIDumpReturn {
         finalize,
         loadDraft,
         deleteDraft,
+        listDrafts,
         setSelectedTitle,
         toggleTag,
         setSelectedTags,

@@ -42,6 +42,7 @@ export async function GET(
             note: {
                 id: note.id,
                 userId: note.userId,
+                title: note.title,
                 rawText: note.rawText,
                 generatedMd: note.contentText,
                 titles: note.titles,

@@ -8,6 +8,7 @@ import { NoteStatus } from "@/generated/prisma";
 import type { Prisma } from "@/generated/prisma";
 import { errorResponse } from "@/lib/api-error";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { slugify } from "@/lib/utils/text";
 
 interface VersionSnapshot {
     versionId: string;
@@ -48,7 +49,7 @@ export async function POST(
             );
         }
 
-        const { section, options } = result.data;
+        const { section, instruction, options } = result.data;
 
         // Fetch the note
         const note = await prisma.note.findFirst({
@@ -84,12 +85,17 @@ export async function POST(
             previousValue,
         };
 
-        // Regenerate the section
+        // Regenerate the section. For markdown with a refinement instruction,
+        // pass the current output so the refinement compounds on it.
         const regenerated = await regenerateSection(
             section,
             note.rawText,
             session.user.id,
-            options ?? {}
+            options ?? {},
+            {
+                instruction,
+                currentMarkdown: note.contentText,
+            }
         );
 
         // Build update data
@@ -104,7 +110,26 @@ export async function POST(
                 updateData.titles = regenerated.titles;
                 break;
             case "tags":
-                // Tags are in the result but stored separately - we'll return them
+                // Persist regenerated tags onto the draft's tag relation so they
+                // survive a reload, replacing any previously connected tags.
+                if (regenerated.tags) {
+                    updateData.tags = {
+                        set: [],
+                        connectOrCreate: regenerated.tags.map((t) => ({
+                            where: {
+                                userId_name: {
+                                    userId: session.user.id,
+                                    name: t.name,
+                                },
+                            },
+                            create: {
+                                name: t.name,
+                                slug: slugify(t.name),
+                                userId: session.user.id,
+                            },
+                        })),
+                    };
+                }
                 break;
             case "markdown":
                 updateData.contentText = regenerated.markdown;

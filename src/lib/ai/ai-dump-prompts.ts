@@ -305,6 +305,40 @@ Output ONLY the summary text. No "Here is the summary:" prefix.`,
 `,
         temperature: 0.2,
     },
+
+    /**
+     * Refine an already-generated Markdown document according to a user
+     * instruction (e.g. "make it shorter", "add bullet points"). Operates on
+     * the CURRENT output, not the raw input, so successive refinements compound.
+     */
+    MARKDOWN_REFINE: {
+        id: "markdown_refine",
+        version: "v1",
+        system: `You are an expert editor who revises Markdown documents according to specific instructions.
+
+Apply the user's instruction to the document while:
+- Preserving all factual content unless the instruction explicitly asks to remove it
+- Keeping valid, well-formed Markdown
+- Maintaining specific facts, numbers, names, dates, and code blocks exactly
+
+Output ONLY the revised Markdown. No explanations, no "Here is the revised document:" prefix.`,
+
+        getTemplate: (tone: AIDumpTone, instruction: string) =>
+            `Revise the following Markdown document according to this instruction:
+
+## Instruction
+${instruction}
+
+## Tone
+${TONE_INSTRUCTIONS[tone]}
+
+## Output
+Provide ONLY the revised Markdown content.
+
+## Current Document
+`,
+        temperature: 0.3,
+    },
 } as const;
 
 // ============================================================================

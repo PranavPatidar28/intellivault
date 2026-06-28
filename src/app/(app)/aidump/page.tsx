@@ -29,10 +29,10 @@ import {
     Lightbulb,
     GraduationCap,
     Mail,
-    Cpu,
     Zap,
     PenLine,
     Edit,
+    AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -42,7 +42,6 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
 import {
     Select,
     SelectContent,
@@ -51,10 +50,11 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { useAIDump } from "@/hooks/use-ai-dump";
+import type { DraftSummary } from "@/hooks/use-ai-dump";
 import { useFileUpload, SUPPORTED_FILE_TYPES } from "@/hooks/use-file-upload";
 import { useToast } from "@/hooks/use-toast";
-import { usePreferences } from "@/components/PreferencesProvider";
 import { cn } from "@/lib/utils";
+import { getRelativeTime } from "@/lib/utils/text";
 import type { AIDumpOptions } from "@/lib/validations/ai-dump";
 import Link from "next/link";
 import { MarkdownRenderer } from "@/components/markdown";
@@ -130,29 +130,23 @@ function useResizablePanel(initialWidth: number, minWidth: number, maxWidth: num
 export default function AIDumpPage() {
     const router = useRouter();
     const { toast } = useToast();
-    const { preferences } = usePreferences();
 
     const [inputContent, setInputContent] = useState("");
     const [options, setOptions] = useState<AIDumpOptions>(DEFAULT_OPTIONS);
     const [previewTab, setPreviewTab] = useState<"generated" | "raw" | "diff">("generated");
     const [copiedSection, setCopiedSection] = useState<string | null>(null);
     const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-    const [selectedModel, setSelectedModel] = useState<string>("gemini-2.0-flash");
     const [isRefining, setIsRefining] = useState(false);
     const [refinementInput, setRefinementInput] = useState("");
-    const hasAppliedPreferences = useRef(false);
 
     // Inline editor
     const [isEditMode, setIsEditMode] = useState(false);
     const [editedMarkdown, setEditedMarkdown] = useState("");
 
-    // Apply user preferences for default model
-    useEffect(() => {
-        if (preferences && !hasAppliedPreferences.current && preferences.defaultLLMModel) {
-            setSelectedModel(preferences.defaultLLMModel);
-            hasAppliedPreferences.current = true;
-        }
-    }, [preferences]);
+    // Saved drafts (resume)
+    const [drafts, setDrafts] = useState<DraftSummary[]>([]);
+    const [draftsLoading, setDraftsLoading] = useState(false);
+    const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
 
     const detectedContentType = useMemo<ContentTypeResult | null>(() => {
         if (inputContent.length < 50) return null;
@@ -178,20 +172,39 @@ export default function AIDumpPage() {
         isRegenerating,
         error,
         streamingStatus,
+        warning,
         selectedTitle,
         selectedTags,
         createAIDump,
         regenerateSection,
         finalize,
+        loadDraft,
+        deleteDraft,
+        listDrafts,
         setSelectedTitle,
         toggleTag,
         reset,
     } = useAIDump();
 
+    const refreshDrafts = useCallback(async () => {
+        setDraftsLoading(true);
+        try {
+            setDrafts(await listDrafts());
+        } finally {
+            setDraftsLoading(false);
+        }
+    }, [listDrafts]);
+
+    // Load the drafts list whenever we're on the empty input screen.
+    useEffect(() => {
+        if (!aiDump && !isProcessing) {
+            refreshDrafts();
+        }
+    }, [aiDump, isProcessing, refreshDrafts]);
+
     const {
         isDragging,
         isUploading,
-        uploadProgress,
         uploadError,
         processedFile,
         handleDragEnter,
@@ -216,18 +229,6 @@ export default function AIDumpPage() {
         }
     }, [processedFile]);
 
-    // Keyboard shortcut: Ctrl+Enter to submit
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && inputContent.trim() && !isProcessing && !aiDump) {
-                e.preventDefault();
-                handleSubmit();
-            }
-        };
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [inputContent, isProcessing, aiDump]);
-
     // Sync edited markdown with AI dump output
     useEffect(() => {
         if (aiDump?.markdown && !isProcessing) {
@@ -236,10 +237,31 @@ export default function AIDumpPage() {
     }, [aiDump?.markdown, isProcessing]);
 
     const handleSubmit = useCallback(async () => {
-        if (!inputContent.trim()) return;
-        // TODO: Pass uploadedImage for multimodal processing
-        await createAIDump(inputContent, options);
-    }, [inputContent, options, createAIDump]);
+        if (!inputContent.trim() && !uploadedImage) return;
+        await createAIDump(inputContent, options, {
+            imageData: uploadedImage ?? undefined,
+            source: processedFile ? "upload" : "paste",
+        });
+    }, [inputContent, uploadedImage, processedFile, options, createAIDump]);
+
+    // Keyboard shortcut: Ctrl+Enter to submit
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (
+                (e.ctrlKey || e.metaKey) &&
+                e.key === "Enter" &&
+                (inputContent.trim() || uploadedImage) &&
+                !isProcessing &&
+                !isUploading &&
+                !aiDump
+            ) {
+                e.preventDefault();
+                handleSubmit();
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [inputContent, uploadedImage, isProcessing, isUploading, aiDump, handleSubmit]);
 
     const handleOptionsChange = useCallback(
         (newOptions: Partial<AIDumpOptions>) => {
@@ -256,16 +278,81 @@ export default function AIDumpPage() {
     );
 
     const handleSave = useCallback(async () => {
-        const noteId = await finalize();
+        const noteId = await finalize({
+            selectedTitle,
+            selectedTags,
+            // Persist the user's inline edits, falling back to the generated md.
+            finalMarkdown: editedMarkdown || aiDump?.markdown || "",
+        });
         if (noteId) {
             router.push(`/notes/${noteId}`);
         }
-    }, [finalize, router]);
+    }, [finalize, router, selectedTitle, selectedTags, editedMarkdown, aiDump?.markdown]);
 
     const handleReset = useCallback(() => {
         setInputContent("");
+        setUploadedImage(null);
+        setIsEditMode(false);
+        setEditedMarkdown("");
+        clearFile();
         reset();
-    }, [reset]);
+    }, [reset, clearFile]);
+
+    const handleLoadDraft = useCallback(
+        async (noteId: string) => {
+            const ok = await loadDraft(noteId);
+            if (!ok) {
+                toast({
+                    title: "Couldn't open draft",
+                    description: "The draft may have been removed. Refreshing the list.",
+                    variant: "destructive",
+                });
+                refreshDrafts();
+            }
+        },
+        [loadDraft, toast, refreshDrafts]
+    );
+
+    const handleDeleteDraft = useCallback(
+        async (noteId: string) => {
+            setDeletingDraftId(noteId);
+            try {
+                const ok = await deleteDraft(noteId);
+                if (ok) {
+                    setDrafts((prev) => prev.filter((d) => d.id !== noteId));
+                }
+            } finally {
+                setDeletingDraftId(null);
+            }
+        },
+        [deleteDraft]
+    );
+
+    // Apply a refinement instruction to the current markdown output.
+    const handleRefine = useCallback(
+        async (instruction: string) => {
+            const trimmed = instruction.trim();
+            if (!trimmed) return;
+            setIsRefining(true);
+            try {
+                const success = await regenerateSection("markdown", {
+                    tone: options.tone,
+                    temperature: options.temperature,
+                    instruction: trimmed,
+                });
+                if (success) {
+                    toast({
+                        title: "Refinement Applied",
+                        description: "The content has been updated based on your instructions.",
+                    });
+                    setRefinementInput("");
+                }
+            } finally {
+                setIsRefining(false);
+            }
+        },
+        [regenerateSection, options.tone, options.temperature, toast]
+    );
 
     const copyToClipboard = useCallback(
         async (text: string, section: string) => {
@@ -285,6 +372,7 @@ export default function AIDumpPage() {
     const hasMarkdown = aiDump?.markdown && aiDump.markdown.length > 0;
     const hasTldr = aiDump?.tldr && aiDump.tldr.length > 0;
     const hasSummary = aiDump?.summary && aiDump.summary.length > 0;
+    const hasActions = aiDump?.actions && aiDump.actions.length > 0;
 
     return (
         <div className="flex flex-col h-full bg-background">
@@ -307,7 +395,7 @@ export default function AIDumpPage() {
                 <div className="flex items-center gap-2">
                     {/* Streaming Status Badge */}
                     {streamingStatus && (
-                        <Badge variant="secondary" className="gap-1.5 animate-pulse">
+                        <Badge variant="secondary" className="gap-1.5 animate-pulse" role="status" aria-live="polite">
                             <Loader2 className="h-3 w-3 animate-spin" />
                             {streamingStatus}
                         </Badge>
@@ -319,7 +407,7 @@ export default function AIDumpPage() {
                                 <RotateCcw className="h-3 w-3" />
                                 Reset
                             </Button>
-                            <Button size="sm" onClick={handleSave} className="gap-1.5">
+                            <Button size="sm" onClick={handleSave} disabled={isProcessing || !selectedTitle.trim()} className="gap-1.5">
                                 Save Note
                             </Button>
                         </>
@@ -367,6 +455,12 @@ export default function AIDumpPage() {
                                         <span className="flex items-center gap-2">
                                             <FileCode className="h-3.5 w-3.5 text-orange-500" />
                                             Code Review
+                                        </span>
+                                    </SelectItem>
+                                    <SelectItem value="code">
+                                        <span className="flex items-center gap-2">
+                                            <FileCode className="h-3.5 w-3.5 text-rose-500" />
+                                            Technical Docs
                                         </span>
                                     </SelectItem>
                                     <SelectItem value="brainstorm">
@@ -423,53 +517,6 @@ export default function AIDumpPage() {
                                         )}
                                 </div>
                             )}
-                        </div>
-
-                        <Separator />
-
-                        {/* AI Model Selection */}
-                        <div>
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                                <Cpu className="h-3 w-3" />
-                                AI Model
-                            </h3>
-                            <Select
-                                value={selectedModel}
-                                onValueChange={setSelectedModel}
-                                disabled={isProcessing}
-                            >
-                                <SelectTrigger className="w-full h-9">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="gemini-2.0-flash">
-                                        <span className="flex items-center gap-2">
-                                            <Zap className="h-3 w-3 text-yellow-500" />
-                                            Gemini 2.0 Flash
-                                            <Badge variant="outline" className="text-[8px] px-1 ml-1">Fast</Badge>
-                                        </span>
-                                    </SelectItem>
-                                    <SelectItem value="gemini-1.5-pro">
-                                        <span className="flex items-center gap-2">
-                                            <Sparkles className="h-3 w-3 text-purple-500" />
-                                            Gemini 1.5 Pro
-                                            <Badge variant="outline" className="text-[8px] px-1 ml-1">Quality</Badge>
-                                        </span>
-                                    </SelectItem>
-                                    <SelectItem value="gpt-4o-mini">
-                                        <span className="flex items-center gap-2">
-                                            <Cpu className="h-3 w-3 text-green-500" />
-                                            GPT-4o Mini
-                                            <Badge variant="outline" className="text-[8px] px-1 ml-1">OpenAI</Badge>
-                                        </span>
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <p className="text-[10px] text-muted-foreground mt-2">
-                                {selectedModel === "gemini-2.0-flash" && "Fastest option, great for most content."}
-                                {selectedModel === "gemini-1.5-pro" && "Higher quality, better for complex content."}
-                                {selectedModel === "gpt-4o-mini" && "OpenAI alternative, good balance."}
-                            </p>
                         </div>
 
                         <Separator />
@@ -569,6 +616,20 @@ export default function AIDumpPage() {
                             <ThinkingPanel reasoning={aiDump.reasoning} isStreaming={isProcessing} />
                         </div>
                     )}
+                    {/* Non-fatal warning (e.g. content truncated) */}
+                    {warning && (
+                        <div className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200" role="status">
+                            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                            <span>{warning}</span>
+                        </div>
+                    )}
+                    {/* Error (persists in the preview state, not just a toast) */}
+                    {error && aiDump && (
+                        <div className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
+                            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                            <span>{error}</span>
+                        </div>
+                    )}
                     {!aiDump && !isProcessing ? (
                         // Input State
                         <div className="flex-1 flex flex-col p-6">
@@ -617,7 +678,9 @@ export default function AIDumpPage() {
                                             <div className="text-center w-48">
                                                 <Loader2 className="h-8 w-8 mx-auto text-primary animate-spin mb-3" />
                                                 <p className="text-sm font-medium">Processing file...</p>
-                                                <Progress value={uploadProgress} className="mt-2" />
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    Extracting text, this may take a moment
+                                                </p>
                                             </div>
                                         </div>
                                     )}
@@ -651,7 +714,7 @@ export default function AIDumpPage() {
                                         <div className="absolute top-3 right-3 w-24 h-24 rounded-lg overflow-hidden border shadow-sm z-5">
                                             <img
                                                 src={uploadedImage}
-                                                alt="Uploaded"
+                                                alt={processedFile?.metadata.filename ? `Uploaded: ${processedFile.metadata.filename}` : "Uploaded image preview"}
                                                 className="w-full h-full object-cover"
                                             />
                                         </div>
@@ -686,7 +749,7 @@ export default function AIDumpPage() {
                                     </div>
                                     <Button
                                         onClick={handleSubmit}
-                                        disabled={!inputContent.trim() || isProcessing}
+                                        disabled={(!inputContent.trim() && !uploadedImage) || isProcessing || isUploading}
                                         className="gap-2"
                                     >
                                         <Wand2 className="h-4 w-4" />
@@ -699,6 +762,65 @@ export default function AIDumpPage() {
 
                                 {(error || uploadError) && (
                                     <p className="text-sm text-destructive mt-2">{error || uploadError}</p>
+                                )}
+
+                                {/* Resume a draft */}
+                                {drafts.length > 0 && (
+                                    <div className="mt-6 pt-4 border-t">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                                    Resume a Draft
+                                                </span>
+                                                {draftsLoading && (
+                                                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                                                )}
+                                            </div>
+                                            <span className="text-[10px] text-muted-foreground">
+                                                Drafts auto-delete after 7 days
+                                            </span>
+                                        </div>
+                                        <div className="space-y-1.5 max-h-56 overflow-auto">
+                                            {drafts.map((draft) => (
+                                                <div
+                                                    key={draft.id}
+                                                    className="group flex items-center gap-2 rounded-lg border bg-card p-2 hover:border-primary/40 transition-colors"
+                                                >
+                                                    <button
+                                                        onClick={() => handleLoadDraft(draft.id)}
+                                                        className="flex-1 min-w-0 text-left"
+                                                    >
+                                                        <p className="text-xs font-medium truncate">
+                                                            {draft.title || "Untitled draft"}
+                                                        </p>
+                                                        {draft.tldr && (
+                                                            <p className="text-[11px] text-muted-foreground truncate">
+                                                                {draft.tldr}
+                                                            </p>
+                                                        )}
+                                                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                            {getRelativeTime(draft.updatedAt)}
+                                                        </p>
+                                                    </button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive"
+                                                        aria-label={`Delete draft ${draft.title || "Untitled draft"}`}
+                                                        disabled={deletingDraftId === draft.id}
+                                                        onClick={() => handleDeleteDraft(draft.id)}
+                                                    >
+                                                        {deletingDraftId === draft.id ? (
+                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                        ) : (
+                                                            <X className="h-3.5 w-3.5" />
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -713,15 +835,25 @@ export default function AIDumpPage() {
                                     </TabsTrigger>
                                     <TabsTrigger value="raw" className="text-xs h-7 px-3 data-[state=active]:bg-background">
                                         <FileText className="h-3 w-3 mr-1.5" />
-                                        Raw
+                                        Input
                                     </TabsTrigger>
                                     <TabsTrigger value="diff" className="text-xs h-7 px-3 data-[state=active]:bg-background">
                                         <GitCompare className="h-3 w-3 mr-1.5" />
-                                        Diff
+                                        Compare
                                     </TabsTrigger>
                                 </TabsList>
 
                                 <div className="flex items-center gap-1">
+                                    {/* Output size indicator */}
+                                    {hasMarkdown && previewTab === "generated" && !isProcessing && (
+                                        <span className="text-[10px] text-muted-foreground mr-2 font-mono">
+                                            {(() => {
+                                                const md = editedMarkdown || aiDump?.markdown || "";
+                                                const words = md.trim().split(/\s+/).filter(Boolean).length;
+                                                return `${words.toLocaleString()} words · ${md.length.toLocaleString()} chars`;
+                                            })()}
+                                        </span>
+                                    )}
                                     {/* Edit/View Toggle */}
                                     {hasMarkdown && previewTab === "generated" && (
                                         <Button
@@ -790,9 +922,22 @@ export default function AIDumpPage() {
                                                         className="min-h-[400px] font-mono text-sm resize-none"
                                                         placeholder="Edit your markdown here..."
                                                     />
-                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                        <FileCode className="h-3 w-3" />
-                                                        <span>Markdown editing • Changes auto-save</span>
+                                                    <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                                                        <div className="flex items-center gap-2">
+                                                            <FileCode className="h-3 w-3" />
+                                                            <span>Markdown editing • Edits are kept and saved when you click Save Note</span>
+                                                        </div>
+                                                        {aiDump?.markdown && editedMarkdown !== aiDump.markdown && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-6 text-[11px] gap-1 flex-shrink-0"
+                                                                onClick={() => setEditedMarkdown(aiDump.markdown)}
+                                                            >
+                                                                <RotateCcw className="h-3 w-3" />
+                                                                Revert to generated
+                                                            </Button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ) : (
@@ -817,9 +962,7 @@ export default function AIDumpPage() {
                                                             size="sm"
                                                             className="h-7 text-xs"
                                                             disabled={isRefining || isRegenerating.markdown}
-                                                            onClick={() => {
-                                                                setRefinementInput("Make it shorter and more concise");
-                                                            }}
+                                                            onClick={() => handleRefine("Make it shorter and more concise")}
                                                         >
                                                             Shorter
                                                         </Button>
@@ -828,9 +971,7 @@ export default function AIDumpPage() {
                                                             size="sm"
                                                             className="h-7 text-xs"
                                                             disabled={isRefining || isRegenerating.markdown}
-                                                            onClick={() => {
-                                                                setRefinementInput("Add more detail and examples");
-                                                            }}
+                                                            onClick={() => handleRefine("Add more detail and examples")}
                                                         >
                                                             More Detail
                                                         </Button>
@@ -839,9 +980,7 @@ export default function AIDumpPage() {
                                                             size="sm"
                                                             className="h-7 text-xs"
                                                             disabled={isRefining || isRegenerating.markdown}
-                                                            onClick={() => {
-                                                                setRefinementInput("Make it more professional and formal");
-                                                            }}
+                                                            onClick={() => handleRefine("Make it more professional and formal")}
                                                         >
                                                             More Formal
                                                         </Button>
@@ -850,9 +989,7 @@ export default function AIDumpPage() {
                                                             size="sm"
                                                             className="h-7 text-xs"
                                                             disabled={isRefining || isRegenerating.markdown}
-                                                            onClick={() => {
-                                                                setRefinementInput("Add bullet points for key information");
-                                                            }}
+                                                            onClick={() => handleRefine("Add bullet points for key information")}
                                                         >
                                                             Add Bullets
                                                         </Button>
@@ -869,24 +1006,7 @@ export default function AIDumpPage() {
                                                             size="sm"
                                                             className="h-16 px-4"
                                                             disabled={!refinementInput.trim() || isRefining || isRegenerating.markdown}
-                                                            onClick={async () => {
-                                                                if (!refinementInput.trim()) return;
-                                                                setIsRefining(true);
-                                                                try {
-                                                                    const success = await regenerateSection("markdown", {
-                                                                        tone: options.tone,
-                                                                    });
-                                                                    if (success) {
-                                                                        toast({
-                                                                            title: "Refinement Applied",
-                                                                            description: "The content has been updated based on your instructions.",
-                                                                        });
-                                                                        setRefinementInput("");
-                                                                    }
-                                                                } finally {
-                                                                    setIsRefining(false);
-                                                                }
-                                                            }}
+                                                            onClick={() => handleRefine(refinementInput)}
                                                         >
                                                             {isRefining || isRegenerating.markdown ? (
                                                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1014,8 +1134,9 @@ export default function AIDumpPage() {
                                             <button
                                                 key={idx}
                                                 onClick={() => setSelectedTitle(title.text)}
+                                                disabled={isProcessing}
                                                 className={cn(
-                                                    "w-full flex items-center gap-2 p-2 rounded-lg border text-left transition-all text-xs",
+                                                    "w-full flex items-center gap-2 p-2 rounded-lg border text-left transition-all text-xs disabled:opacity-60 disabled:cursor-not-allowed",
                                                     selectedTitle === title.text
                                                         ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                                                         : "border-muted hover:border-primary/30 hover:bg-muted/50"
@@ -1067,8 +1188,9 @@ export default function AIDumpPage() {
                                             <button
                                                 key={tag.name}
                                                 onClick={() => toggleTag(tag.name)}
+                                                disabled={isProcessing}
                                                 className={cn(
-                                                    "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all",
+                                                    "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all disabled:opacity-60 disabled:cursor-not-allowed",
                                                     selectedTags.includes(tag.name)
                                                         ? "bg-primary text-primary-foreground"
                                                         : "bg-muted hover:bg-muted/80 text-muted-foreground"
@@ -1127,6 +1249,56 @@ export default function AIDumpPage() {
                             </div>
 
                             <Separator />
+
+                            {/* Action Items (shown when the toggle produced any) */}
+                            {(hasActions || (isProcessing && options.toggles.actions)) && (
+                                <>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
+                                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                                Action Items
+                                            </span>
+                                        </div>
+                                        {hasActions ? (
+                                            <div className="space-y-1.5">
+                                                {aiDump!.actions.map((action, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className="flex items-start gap-2 rounded-lg border bg-card p-2 text-xs"
+                                                    >
+                                                        <ListTodo className="h-3.5 w-3.5 mt-0.5 text-primary flex-shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="leading-snug">{action.text}</p>
+                                                            {(action.assignee || action.due_date) && (
+                                                                <div className="mt-1 flex flex-wrap gap-1">
+                                                                    {action.assignee && (
+                                                                        <Badge variant="secondary" className="text-[9px]">
+                                                                            {action.assignee}
+                                                                        </Badge>
+                                                                    )}
+                                                                    {action.due_date && (
+                                                                        <Badge variant="outline" className="text-[9px]">
+                                                                            {action.due_date}
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-1.5">
+                                                <Skeleton className="h-8 w-full" />
+                                                <Skeleton className="h-8 w-full" />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <Separator />
+                                </>
+                            )}
 
                             {/* Quick Actions */}
                             <div className="space-y-2">

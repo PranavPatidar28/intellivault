@@ -133,6 +133,24 @@ export async function GET(request: NextRequest) {
         const limit = Math.min(parseInt(searchParams.get("limit") ?? "10", 10), 50);
         const skip = (page - 1) * limit;
 
+        // Opportunistic cleanup: purge this user's abandoned drafts older than
+        // the retention window. Drafts are created on every AI Dump run, so
+        // without this they accumulate forever. Best-effort — a failure here
+        // must not block listing.
+        const DRAFT_TTL_DAYS = 7;
+        const cutoff = new Date(Date.now() - DRAFT_TTL_DAYS * 24 * 60 * 60 * 1000);
+        try {
+            await prisma.note.deleteMany({
+                where: {
+                    userId: session.user.id,
+                    status: NoteStatus.DRAFT,
+                    updatedAt: { lt: cutoff },
+                },
+            });
+        } catch (cleanupError) {
+            console.error("Draft cleanup failed (non-fatal):", cleanupError);
+        }
+
         const [notes, total] = await Promise.all([
             prisma.note.findMany({
                 where: {
