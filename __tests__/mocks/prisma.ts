@@ -1,5 +1,5 @@
 // Mock Prisma Client for testing
-export const mockPrismaClient = {
+const mockPrismaClient: any = {
   note: {
     create: jest.fn(),
     findMany: jest.fn(),
@@ -50,4 +50,5 @@ jest.mock('@/lib/prisma', () => ({
   default: mockPrismaClient,
 }));
 
+export { mockPrismaClient };
 export default mockPrismaClient;

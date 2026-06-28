@@ -74,7 +74,7 @@ export async function POST(
         }
 
         // Save current value to version history
-        const currentVersions = (note.versions as VersionSnapshot[]) || [];
+        const currentVersions = (note.versions as unknown as VersionSnapshot[]) || [];
         const previousValue = getSectionValue(note, section);
 
         const newVersion: VersionSnapshot = {
@@ -94,7 +94,7 @@ export async function POST(
 
         // Build update data
         const updateData: Prisma.NoteUpdateInput = {
-            versions: [...currentVersions, newVersion],
+            versions: [...currentVersions, newVersion] as unknown as Prisma.InputJsonValue,
             updatedAt: new Date(),
         };
 

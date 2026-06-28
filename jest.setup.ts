@@ -7,7 +7,12 @@ import { Request, Response as NodeFetchResponse, Headers } from 'node-fetch';
 // Create Response with json static method and proper status exposure
 class Response extends NodeFetchResponse {
   constructor(body?: BodyInit | null, init?: ResponseInit) {
-    super(body || undefined, init);
+    // node-fetch's Body/Response init types are narrower than the DOM lib's;
+    // cast to bridge the two definitions in this polyfill.
+    super(
+      (body as unknown as ConstructorParameters<typeof NodeFetchResponse>[0]) || undefined,
+      init as unknown as ConstructorParameters<typeof NodeFetchResponse>[1]
+    );
     // Ensure status is directly accessible
     Object.defineProperty(this, 'status', {
       value: init?.status || 200,
