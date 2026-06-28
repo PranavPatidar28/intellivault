@@ -115,7 +115,9 @@ function isStructuredOutputUnsupported(error: unknown): boolean {
 
 /**
  * Extract a JSON object/array from raw model text. Tolerates markdown code
- * fences and surrounding prose. Throws if no JSON can be found/parsed.
+ * fences and surrounding prose, and stops at the FIRST complete JSON value so
+ * trailing junk after a valid object (which some models emit) is ignored.
+ * Throws if no JSON can be found/parsed.
  */
 function extractJson(text: string): unknown {
   const trimmed = text.trim();
@@ -123,14 +125,44 @@ function extractJson(text: string): unknown {
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1]!.trim() : trimmed;
 
+  // Fast path: the whole candidate is valid JSON.
   try {
     return JSON.parse(candidate);
   } catch {
-    // Fall back to the first {...} or [...] span.
-    const objMatch = candidate.match(/[{[][\s\S]*[}\]]/);
-    if (objMatch) return JSON.parse(objMatch[0]);
+    // Otherwise scan for the first balanced {...} or [...] span, respecting
+    // string literals and escapes, and stopping when depth returns to zero.
+    const span = firstBalancedJson(candidate);
+    if (span !== null) return JSON.parse(span);
     throw new Error("No JSON object found in model output");
   }
+}
+
+function firstBalancedJson(s: string): string | null {
+  const start = s.search(/[{[]/);
+  if (start === -1) return null;
+
+  const open = s[start];
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return null;
 }
 
 /**
