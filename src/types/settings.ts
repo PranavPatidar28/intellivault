@@ -12,7 +12,7 @@ export type FontSizeOption = "small" | "medium" | "large";
 export type DisplayDensityOption = "compact" | "comfortable" | "spacious";
 
 // LLM Provider options
-export type LLMProviderOption = "ollama" | "gemini" | "openai" | "openrouter";
+export type LLMProviderOption = "ollama" | "gemini" | "openai" | "openrouter" | "nvidia";
 
 // Note view options
 export type NoteViewOption = "grid" | "list";
@@ -111,5 +111,11 @@ export const LLM_MODELS: Record<LLMProviderOption, { value: string; label: strin
         { value: "openai/gpt-4o-mini", label: "GPT-4o Mini" },
         { value: "anthropic/claude-3-haiku", label: "Claude 3 Haiku" },
         { value: "google/gemini-flash-1.5", label: "Gemini Flash 1.5" },
+    ],
+    nvidia: [
+        { value: "meta/llama-3.1-8b-instruct", label: "Llama 3.1 8B" },
+        { value: "meta/llama-3.1-70b-instruct", label: "Llama 3.1 70B" },
+        { value: "deepseek-ai/deepseek-r1", label: "DeepSeek R1 (reasoning)" },
+        { value: "mistralai/mistral-7b-instruct-v0.3", label: "Mistral 7B" },
     ],
 };

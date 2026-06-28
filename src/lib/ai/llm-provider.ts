@@ -5,7 +5,6 @@
  * with automatic fallback and retry logic.
  */
 
-import { env } from "@/env";
 import { GoogleGenAI } from "@google/genai";
 
 // ============================================================================
@@ -915,6 +914,202 @@ export class OpenRouterProvider implements LLMProvider {
 }
 
 // ============================================================================
+// NVIDIA Provider (NIM / build.nvidia.com — OpenAI-compatible)
+// ============================================================================
+
+export class NvidiaProvider implements LLMProvider {
+    name = "nvidia";
+    private apiKey: string | undefined;
+    private model: string;
+    private baseUrl: string;
+
+    constructor(apiKey?: string, model?: string, baseUrl?: string) {
+        this.apiKey = apiKey || process.env.NVIDIA_API_KEY;
+        this.model = model || process.env.NVIDIA_MODEL || "meta/llama-3.1-8b-instruct";
+        this.baseUrl = (baseUrl || process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/$/, "");
+    }
+
+    async isAvailable(): Promise<boolean> {
+        return !!this.apiKey;
+    }
+
+    supportsMultimodal(): boolean {
+        return false; // Vision NIMs exist but are not enabled in this implementation
+    }
+
+    private buildMessages(prompt: string, systemPrompt?: string) {
+        const messages: Array<{ role: string; content: string }> = [];
+        if (systemPrompt) {
+            messages.push({ role: "system", content: systemPrompt });
+        }
+        messages.push({ role: "user", content: prompt });
+        return messages;
+    }
+
+    async generateText(prompt: string, options?: LLMOptions): Promise<LLMResponse> {
+        if (!this.apiKey) {
+            throw new Error("NVIDIA API key not configured");
+        }
+
+        const startTime = Date.now();
+        const timeout = options?.timeout || 60000;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        try {
+            const requestBody: Record<string, unknown> = {
+                model: this.model,
+                messages: this.buildMessages(prompt, options?.systemPrompt),
+                temperature: options?.temperature ?? 0.7,
+            };
+
+            if (options?.maxTokens) {
+                requestBody.max_tokens = options.maxTokens;
+            }
+
+            const response = await fetch(`${this.baseUrl}/chat/completions`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${this.apiKey}`,
+                },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                    `NVIDIA API error: ${response.status} ${errorData.error?.message || response.statusText}`
+                );
+            }
+
+            const data = await response.json();
+            // Reasoning models surface their answer in `content`; the chain of
+            // thought (when enabled) is in `reasoning_content`. We return only
+            // the final content as the answer.
+            const text = data.choices?.[0]?.message?.content || "";
+
+            return {
+                text,
+                usage: data.usage ? {
+                    inputTokens: data.usage.prompt_tokens || 0,
+                    outputTokens: data.usage.completion_tokens || 0,
+                } : undefined,
+                provider: this.name,
+                latencyMs: Date.now() - startTime,
+            };
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error instanceof Error && error.name === "AbortError") {
+                throw new Error(`NVIDIA request timed out after ${timeout}ms`);
+            }
+            throw error;
+        }
+    }
+
+    async *generateTextStream(prompt: string, options?: LLMOptions): AsyncGenerator<string, void, unknown> {
+        if (!this.apiKey) {
+            throw new Error("NVIDIA API key not configured");
+        }
+
+        const timeout = options?.timeout || 60000;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+
+        try {
+            const requestBody: Record<string, unknown> = {
+                model: this.model,
+                messages: this.buildMessages(prompt, options?.systemPrompt),
+                temperature: options?.temperature ?? 0.7,
+                stream: true,
+            };
+
+            if (options?.maxTokens) {
+                requestBody.max_tokens = options.maxTokens;
+            }
+
+            const response = await fetch(`${this.baseUrl}/chat/completions`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${this.apiKey}`,
+                },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                    `NVIDIA API error: ${response.status} ${errorData.error?.message || response.statusText}`
+                );
+            }
+
+            reader = response.body?.getReader();
+            if (!reader) throw new Error("No response body");
+
+            const decoder = new TextDecoder();
+            let buffer = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed.startsWith("data: ")) continue;
+                    const jsonStr = trimmed.slice(6);
+                    if (jsonStr === "[DONE]") return;
+                    if (!jsonStr) continue;
+                    try {
+                        const data = JSON.parse(jsonStr);
+                        // Stream only the final answer content, not reasoning tokens.
+                        const text = data.choices?.[0]?.delta?.content;
+                        if (text) {
+                            yield text;
+                        }
+                    } catch {
+                        // Skip malformed JSON
+                    }
+                }
+            }
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error instanceof Error && error.name === "AbortError") {
+                throw new Error(`NVIDIA request timed out after ${timeout}ms`);
+            }
+            throw error;
+        } finally {
+            if (reader) {
+                try {
+                    await reader.cancel();
+                } catch {
+                    // Ignore cancel errors
+                }
+            }
+        }
+    }
+
+    estimateCost(): number {
+        // build.nvidia.com NIM endpoints are free during preview; no per-token
+        // cost is modeled here.
+        return 0;
+    }
+}
+
+// ============================================================================
 // Provider Factory & Cache
 // ============================================================================
 
@@ -935,16 +1130,19 @@ export function getAllProviders(): LLMProvider[] {
     const geminiProvider = new GeminiProvider();
     const openaiProvider = new OpenAIProvider();
     const openrouterProvider = new OpenRouterProvider();
+    const nvidiaProvider = new NvidiaProvider();
 
     // Add in priority order
     if (defaultProvider === "openrouter") {
-        providers.push(openrouterProvider, geminiProvider, openaiProvider, ollamaProvider);
+        providers.push(openrouterProvider, geminiProvider, openaiProvider, nvidiaProvider, ollamaProvider);
     } else if (defaultProvider === "gemini") {
-        providers.push(geminiProvider, openrouterProvider, openaiProvider, ollamaProvider);
+        providers.push(geminiProvider, openrouterProvider, openaiProvider, nvidiaProvider, ollamaProvider);
     } else if (defaultProvider === "openai") {
-        providers.push(openaiProvider, openrouterProvider, geminiProvider, ollamaProvider);
+        providers.push(openaiProvider, openrouterProvider, geminiProvider, nvidiaProvider, ollamaProvider);
+    } else if (defaultProvider === "nvidia") {
+        providers.push(nvidiaProvider, geminiProvider, openrouterProvider, openaiProvider, ollamaProvider);
     } else {
-        providers.push(ollamaProvider, geminiProvider, openaiProvider, openrouterProvider);
+        providers.push(ollamaProvider, geminiProvider, openaiProvider, openrouterProvider, nvidiaProvider);
     }
 
     cachedProviders = providers;

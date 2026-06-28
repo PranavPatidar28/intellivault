@@ -20,7 +20,7 @@ export const updatePreferencesSchema = z
 
     // AI Settings
     defaultLLMProvider: z
-      .enum(["ollama", "gemini", "openai", "openrouter"])
+      .enum(["ollama", "gemini", "openai", "openrouter", "nvidia"])
       .nullable(),
     defaultLLMModel: z.string().max(100).nullable(),
     aiAutoSummarize: z.boolean(),

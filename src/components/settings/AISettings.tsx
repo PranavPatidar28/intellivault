@@ -94,6 +94,12 @@ export function AISettings() {
                                     OpenRouter
                                 </span>
                             </SelectItem>
+                            <SelectItem value="nvidia">
+                                <span className="flex items-center gap-2">
+                                    <Zap className="h-3 w-3 text-green-500" />
+                                    NVIDIA NIM
+                                </span>
+                            </SelectItem>
                         </SelectContent>
                     </Select>
                 </SettingsItem>
