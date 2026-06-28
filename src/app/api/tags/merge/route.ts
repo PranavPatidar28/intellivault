@@ -20,11 +20,32 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { sourceTagIds, targetTagId } = mergeTagsSchema.parse(body);
+    const parsed = mergeTagsSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const { targetTagId } = parsed.data;
+    // Exclude the target from the sources so a self-merge can't soft-delete the
+    // target or strip it from notes via a disconnect+connect of the same id.
+    const sourceTagIds = parsed.data.sourceTagIds.filter(
+      (id) => id !== targetTagId
+    );
+
+    if (sourceTagIds.length === 0) {
+      return NextResponse.json(
+        { error: "No source tags to merge (cannot merge a tag into itself)" },
+        { status: 400 }
+      );
+    }
 
     // Verify target tag exists and belongs to user
     const targetTag = await prisma.tag.findFirst({
-      where: { 
+      where: {
         id: targetTagId,
         userId: session.user.id,
       },
@@ -37,7 +58,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get all notes with source tags
+    // Get all notes with source tags (scoped to the caller's own tags)
     const sourceTags = await prisma.tag.findMany({
       where: {
         id: { in: sourceTagIds },
@@ -54,9 +75,10 @@ export async function POST(request: NextRequest) {
       tag.notes.forEach((note) => noteIds.add(note.id));
     });
 
-    // Update all notes to use target tag
-    await prisma.$transaction(
-      Array.from(noteIds).map((noteId) =>
+    // Perform reassignment, source soft-delete, and target touch atomically so
+    // a mid-operation failure can't leave the tag graph inconsistent.
+    await prisma.$transaction([
+      ...Array.from(noteIds).map((noteId) =>
         prisma.note.update({
           where: { id: noteId },
           data: {
@@ -66,30 +88,23 @@ export async function POST(request: NextRequest) {
             },
           },
         })
-      )
-    );
-
-    // Soft delete source tags
-    await prisma.tag.updateMany({
-      where: {
-        id: { in: sourceTagIds },
-        userId: session.user.id,
-      },
-      data: {
-        deletedAt: new Date(),
-      },
-    });
-
-    // Update target tag's lastUsed
-    await prisma.tag.update({
-      where: { 
-        id: targetTagId,
-        userId: session.user.id,
-      },
-      data: {
-        lastUsed: new Date(),
-      },
-    });
+      ),
+      prisma.tag.updateMany({
+        where: {
+          id: { in: sourceTagIds },
+          userId: session.user.id,
+        },
+        data: {
+          deletedAt: new Date(),
+        },
+      }),
+      prisma.tag.update({
+        where: { id: targetTagId },
+        data: {
+          lastUsed: new Date(),
+        },
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,

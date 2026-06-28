@@ -16,14 +16,15 @@ interface FileTypeConfig {
  */
 export const FILE_TYPE_CONFIG: Record<FileCategory, FileTypeConfig> = {
     IMAGE: {
+        // SVG is intentionally excluded: blobs are served from a public URL and
+        // a scripted SVG opened directly is an XSS / phishing-hosting vector.
         mimeTypes: [
             "image/jpeg",
             "image/png",
             "image/gif",
             "image/webp",
-            "image/svg+xml",
         ],
-        extensions: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"],
+        extensions: [".jpg", ".jpeg", ".png", ".gif", ".webp"],
         maxSize: 5 * 1024 * 1024, // 5MB
         accept: "image/*",
     },

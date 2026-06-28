@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { createAIDumpSchema } from "@/lib/validations/ai-dump";
 import { processAIDump } from "@/lib/ai/ai-dump-service";
 import { NoteStatus } from "@/generated/prisma";
+import { errorResponse } from "@/lib/api-error";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /**
  * POST /api/ai-dump
@@ -18,6 +20,11 @@ export async function POST(request: NextRequest) {
     if (!session?.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Rate-limit this expensive endpoint (processAIDump fires several paid LLM
+    // calls) per user to prevent cost/DoS abuse.
+    const limited = enforceRateLimit(session.user.id, RATE_LIMITS.ai);
+    if (limited) return limited;
 
     try {
         const json = await request.json();
@@ -81,7 +88,7 @@ export async function POST(request: NextRequest) {
 
         // Trigger embedding in background
         import("@/lib/ai/embedding-sync").then(({ embedNote }) => {
-            embedNote(note.id).catch((err: unknown) =>
+            embedNote(note.id, { userId: session.user.id }).catch((err: unknown) =>
                 console.error(`Failed to embed AI Dump note ${note.id}:`, err)
             );
         });
@@ -103,13 +110,7 @@ export async function POST(request: NextRequest) {
         });
     } catch (error) {
         console.error("Error processing AI Dump:", error);
-        return NextResponse.json(
-            {
-                error: "Failed to process AI Dump",
-                details: error instanceof Error ? error.message : "Unknown error",
-            },
-            { status: 500 }
-        );
+        return errorResponse("Failed to process AI Dump", 500, error);
     }
 }
 

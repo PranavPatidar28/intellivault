@@ -6,6 +6,7 @@ import { finalizeNoteSchema } from "@/lib/validations/ai-dump";
 import { NoteStatus } from "@/generated/prisma";
 import { slugify } from "@/lib/utils/text";
 import { markdownToTipTap, stripCodeFences } from "@/lib/utils/markdown-to-tiptap";
+import { errorResponse } from "@/lib/api-error";
 
 /**
  * POST /api/ai-dump/[id]/finalize
@@ -95,7 +96,7 @@ export async function POST(
 
         // Trigger re-embedding for the finalized note
         import("@/lib/ai/embedding-sync").then(({ embedNote }) => {
-            embedNote(updatedNote.id).catch((err: unknown) =>
+            embedNote(updatedNote.id, { userId: session.user.id }).catch((err: unknown) =>
                 console.error(`Failed to re-embed finalized note ${updatedNote.id}:`, err)
             );
         });
@@ -114,12 +115,6 @@ export async function POST(
         });
     } catch (error) {
         console.error("Error finalizing AI Dump:", error);
-        return NextResponse.json(
-            {
-                error: "Failed to finalize AI Dump",
-                details: error instanceof Error ? error.message : "Unknown error",
-            },
-            { status: 500 }
-        );
+        return errorResponse("Failed to finalize AI Dump", 500, error);
     }
 }

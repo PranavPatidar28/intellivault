@@ -376,12 +376,16 @@ function MarkdownRendererInner({
         ),
 
         // Images
+        // AI-generated markdown can contain external image URLs. referrerPolicy
+        // prevents leaking the viewer's referrer to third-party hosts (privacy
+        // beacon). react-markdown already strips javascript:/data: schemes.
         img: ({ src, alt }) => (
             <img
                 src={src}
                 alt={alt || ""}
                 className="max-w-full h-auto rounded-lg my-4"
                 loading="lazy"
+                referrerPolicy="no-referrer"
             />
         ),
 

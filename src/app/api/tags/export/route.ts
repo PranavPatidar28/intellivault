@@ -3,13 +3,22 @@ import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { headers as nextHeaders } from "next/headers";
 import { z } from "zod";
+import type { Prisma } from "@/generated/prisma";
 
 const exportSchema = z.object({
   format: z.enum(["json", "csv"]),
-  tagIds: z.array(z.string()).optional(),
+  tagIds: z.array(z.string()).max(5000).optional(),
   includeArchived: z.boolean().optional().default(false),
   includeDeleted: z.boolean().optional().default(false),
 });
+
+// Escape a value for CSV: wrap in quotes, double embedded quotes, and neutralize
+// formula-injection prefixes (=, +, -, @) that spreadsheet apps would execute.
+function csvCell(value: string | number | boolean | null | undefined): string {
+  const str = value === null || value === undefined ? "" : String(value);
+  const sanitized = /^[=+\-@]/.test(str) ? `'${str}` : str;
+  return `"${sanitized.replace(/"/g, '""')}"`;
+}
 
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({
@@ -22,11 +31,20 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { format, tagIds, includeArchived, includeDeleted } =
-      exportSchema.parse(body);
+    const parsed = exportSchema.safeParse(body);
 
-    // Build where clause
-    const where: any = {};
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const { format, tagIds, includeArchived, includeDeleted } = parsed.data;
+
+    // Scope every export to the caller's own tags so attacker-supplied tagIds
+    // from other tenants can never be returned.
+    const where: Prisma.TagWhereInput = { userId: session.user.id };
     if (tagIds && tagIds.length > 0) {
       where.id = { in: tagIds };
     }
@@ -80,11 +98,11 @@ export async function POST(request: NextRequest) {
 
       const rows = tags.map((tag) =>
         [
-          `"${tag.name}"`,
-          `"${tag.slug}"`,
-          `"${tag.color || ""}"`,
-          `"${tag.description || ""}"`,
-          `"${tag.parent?.name || ""}"`,
+          csvCell(tag.name),
+          csvCell(tag.slug),
+          csvCell(tag.color),
+          csvCell(tag.description),
+          csvCell(tag.parent?.name),
           tag.isFavorite,
           tag.isArchived,
           tag._count.notes,

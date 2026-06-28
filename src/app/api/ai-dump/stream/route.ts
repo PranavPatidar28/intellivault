@@ -6,6 +6,7 @@ import { NoteStatus } from "@/generated/prisma";
 import { processAIDumpStream } from "@/lib/ai/ai-dump-service";
 import { createAIDumpSchema } from "@/lib/validations/ai-dump";
 import type { AIDumpOptions } from "@/lib/validations/ai-dump";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /**
  * POST /api/ai-dump/stream
@@ -21,6 +22,20 @@ export async function POST(request: NextRequest) {
             status: 401,
             headers: { "Content-Type": "application/json" },
         });
+    }
+
+    const rl = checkRateLimit(session.user.id, RATE_LIMITS.ai.limit, RATE_LIMITS.ai.windowMs);
+    if (!rl.success) {
+        return new Response(
+            JSON.stringify({ error: "Too many requests. Please slow down." }),
+            {
+                status: 429,
+                headers: {
+                    "Content-Type": "application/json",
+                    "Retry-After": String(rl.retryAfter),
+                },
+            }
+        );
     }
 
     let body;

@@ -132,7 +132,7 @@ export async function PUT(
 
     // Trigger embedding in background
     import("@/lib/ai/embedding-sync").then(({ embedNote }) => {
-      embedNote(note.id).catch((err: unknown) =>
+      embedNote(note.id, { userId: session.user.id }).catch((err: unknown) =>
         console.error(`Failed to auto-embed updated note ${note.id}:`, err)
       );
     });

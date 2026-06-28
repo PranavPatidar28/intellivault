@@ -6,6 +6,8 @@ import { regenerateSectionSchema } from "@/lib/validations/ai-dump";
 import { regenerateSection } from "@/lib/ai/ai-dump-service";
 import { NoteStatus } from "@/generated/prisma";
 import type { Prisma } from "@/generated/prisma";
+import { errorResponse } from "@/lib/api-error";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 interface VersionSnapshot {
     versionId: string;
@@ -29,6 +31,9 @@ export async function POST(
     if (!session?.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = enforceRateLimit(session.user.id, RATE_LIMITS.ai);
+    if (limited) return limited;
 
     const { id } = await params;
 
@@ -121,13 +126,7 @@ export async function POST(
         });
     } catch (error) {
         console.error("Error regenerating section:", error);
-        return NextResponse.json(
-            {
-                error: "Failed to regenerate section",
-                details: error instanceof Error ? error.message : "Unknown error",
-            },
-            { status: 500 }
-        );
+        return errorResponse("Failed to regenerate section", 500, error);
     }
 }
 

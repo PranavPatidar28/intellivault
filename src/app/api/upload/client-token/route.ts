@@ -7,17 +7,19 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { head } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import prisma from "@/lib/prisma";
 import {
-    validateFile,
     getFileCategory,
+    isSupportedMimeType,
     generateBlobPathname,
     FILE_TYPE_CONFIG,
     type FileCategory,
 } from "@/lib/upload/file-types";
 import { FileType } from "@/generated/prisma/client";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /**
  * Convert FileCategory to Prisma FileType enum
@@ -48,6 +50,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         );
     }
 
+    const limited = enforceRateLimit(session.user.id, RATE_LIMITS.upload);
+    if (limited) return limited;
+
     const userId = session.user.id;
     const body = (await request.json()) as HandleUploadBody;
 
@@ -58,19 +63,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             onBeforeGenerateToken: async (pathname, clientPayload) => {
                 // Parse the client payload for additional context
                 const payload = clientPayload ? JSON.parse(clientPayload) : {};
-                const { noteId, filename, mimeType, size } = payload;
+                const { noteId, filename, mimeType } = payload;
 
-                // Validate file type and size
-                if (mimeType) {
-                    const category = getFileCategory(mimeType);
-                    const maxSize = FILE_TYPE_CONFIG[category].maxSize;
-
-                    if (size && size > maxSize) {
-                        throw new Error(
-                            `File size exceeds maximum allowed for ${category.toLowerCase()} files`
-                        );
-                    }
+                // Require a supported MIME type up front. Skipping validation
+                // when mimeType is absent would let a caller bypass the size cap
+                // entirely, so reject instead.
+                if (!mimeType || !isSupportedMimeType(mimeType)) {
+                    throw new Error("Unsupported or missing file type");
                 }
+
+                const category = getFileCategory(mimeType);
+                const maxSize = FILE_TYPE_CONFIG[category].maxSize;
 
                 // Generate a unique pathname
                 const blobPathname = generateBlobPathname(
@@ -79,25 +82,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                 );
 
                 return {
-                    allowedContentTypes: [
-                        ...FILE_TYPE_CONFIG.IMAGE.mimeTypes,
-                        ...FILE_TYPE_CONFIG.VIDEO.mimeTypes,
-                        ...FILE_TYPE_CONFIG.AUDIO.mimeTypes,
-                        ...FILE_TYPE_CONFIG.DOCUMENT.mimeTypes,
-                    ],
+                    allowedContentTypes: FILE_TYPE_CONFIG[category].mimeTypes,
+                    // Vercel Blob enforces this server-side regardless of any
+                    // client-claimed size, so an attacker cannot upload a larger
+                    // file by lying in clientPayload.
+                    maximumSizeInBytes: maxSize,
                     tokenPayload: JSON.stringify({
                         userId,
                         noteId,
                         filename,
                         mimeType,
-                        size,
+                        pathname: blobPathname,
                     }),
                 };
             },
             onUploadCompleted: async ({ blob, tokenPayload }) => {
                 // Parse the token payload
                 const payload = tokenPayload ? JSON.parse(tokenPayload) : {};
-                const { userId, noteId, filename, mimeType, size } = payload;
+                const { userId, noteId, filename, mimeType } = payload;
 
                 if (!userId || !mimeType) {
                     console.error("[Client Upload] Missing required payload data");
@@ -107,6 +109,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                 try {
                     const category = getFileCategory(mimeType);
 
+                    // Derive the authoritative size from blob metadata rather
+                    // than trusting the client-supplied value.
+                    let size = 0;
+                    try {
+                        const meta = await head(blob.url);
+                        size = meta.size;
+                    } catch (headError) {
+                        console.error("[Client Upload] Failed to read blob metadata:", headError);
+                    }
+
                     // Create database record
                     await prisma.mediaAttachment.create({
                         data: {
@@ -115,7 +127,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                             filename: filename || blob.pathname.split("/").pop() || "unknown",
                             mimeType,
                             fileType: categoryToFileType(category),
-                            size: size || 0,
+                            size,
                             userId,
                             noteId: noteId || null,
                         },
@@ -131,7 +143,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     } catch (error) {
         console.error("[Client Upload API] Error:", error);
 
-        const message = error instanceof Error ? error.message : "Upload failed";
+        const message =
+            process.env.NODE_ENV !== "production" && error instanceof Error
+                ? error.message
+                : "Upload failed";
 
         return NextResponse.json(
             { success: false, error: message },

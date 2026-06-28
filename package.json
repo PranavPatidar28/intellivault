@@ -60,7 +60,6 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.7",
-    "html2pdf.js": "^0.12.1",
     "lodash.throttle": "^4.1.1",
     "lucide-react": "^0.553.0",
     "mammoth": "^1.11.0",

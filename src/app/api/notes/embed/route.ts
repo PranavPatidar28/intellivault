@@ -83,7 +83,9 @@ export async function POST(request: NextRequest) {
 
     // Embed a specific note
     if (noteId) {
-      const embedResult = await embedNote(noteId);
+      // Pass userId so embedNote enforces ownership (prevents embedding
+      // another user's note by guessing its id).
+      const embedResult = await embedNote(noteId, { userId: session.user.id });
       return NextResponse.json({
         success: embedResult.status === "success",
         result: embedResult,

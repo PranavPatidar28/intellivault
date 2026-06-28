@@ -29,9 +29,21 @@ const envSchema = z.object({
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
-  console.error("❌ Invalid environment variables:", parsed.error.flatten().fieldErrors);
-  // For now, don't throw to allow build to proceed if envs are missing in this context
-  // throw new Error("Invalid environment variables");
+  console.error(
+    "❌ Invalid environment variables:",
+    parsed.error.flatten().fieldErrors
+  );
+  // Fail fast in production: missing secrets like BETTER_AUTH_SECRET or
+  // DATABASE_URL must not be allowed to silently fall back to raw process.env,
+  // which leads to confusing runtime auth/db failures. During build (when the
+  // values are often injected later) we tolerate it.
+  if (process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build") {
+    throw new Error(
+      "Invalid environment variables. See logged field errors above."
+    );
+  }
 }
 
-export const env = parsed.success ? parsed.data : (process.env as unknown as z.infer<typeof envSchema>);
+export const env = parsed.success
+  ? parsed.data
+  : (process.env as unknown as z.infer<typeof envSchema>);

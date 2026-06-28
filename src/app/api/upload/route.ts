@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { uploadFile } from "@/lib/upload/upload-service";
 import { validateFile, getFileCategory, formatFileSize } from "@/lib/upload/file-types";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
     try {
@@ -22,6 +23,9 @@ export async function POST(request: NextRequest) {
                 { status: 401 }
             );
         }
+
+        const limited = enforceRateLimit(session.user.id, RATE_LIMITS.upload);
+        if (limited) return limited;
 
         // Parse form data
         const formData = await request.formData();
@@ -63,7 +67,10 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error("[Upload API] Error:", error);
 
-        const message = error instanceof Error ? error.message : "Upload failed";
+        const message =
+            process.env.NODE_ENV !== "production" && error instanceof Error
+                ? error.message
+                : "Upload failed";
 
         return NextResponse.json(
             { success: false, error: message },

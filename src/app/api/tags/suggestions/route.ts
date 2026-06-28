@@ -3,9 +3,10 @@ import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { headers as nextHeaders } from "next/headers";
 import { z } from "zod";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 const suggestionsSchema = z.object({
-  content: z.string().min(1, "Content is required"),
+  content: z.string().min(1, "Content is required").max(50_000),
   maxSuggestions: z.number().min(1).max(10).default(5),
 });
 
@@ -18,14 +19,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const limited = enforceRateLimit(session.user.id, RATE_LIMITS.ai);
+  if (limited) return limited;
+
   try {
     const body = await request.json();
-    const { content, maxSuggestions } = suggestionsSchema.parse(body);
+    const parsed = suggestionsSchema.safeParse(body);
 
-    // Get existing tags to suggest from
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const { content, maxSuggestions } = parsed.data;
+
+    // Get the caller's own existing tags to suggest from. Scoping by userId
+    // prevents leaking other tenants' tag vocabulary (both in the response and
+    // in the LLM prompt below).
     const existingTags = await prisma.tag.findMany({
-      where: { deletedAt: null, isArchived: false },
+      where: { userId: session.user.id, deletedAt: null, isArchived: false },
       select: { name: true, usageCount: true },
+      orderBy: { usageCount: "desc" },
       take: 100,
     });
 

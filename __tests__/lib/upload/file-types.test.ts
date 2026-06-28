@@ -21,7 +21,11 @@ describe("file-types", () => {
             expect(getFileCategory("image/png")).toBe("IMAGE");
             expect(getFileCategory("image/gif")).toBe("IMAGE");
             expect(getFileCategory("image/webp")).toBe("IMAGE");
-            expect(getFileCategory("image/svg+xml")).toBe("IMAGE");
+        });
+
+        it("should reject SVG (excluded for XSS safety)", () => {
+            expect(isSupportedMimeType("image/svg+xml")).toBe(false);
+            expect(() => getFileCategory("image/svg+xml")).toThrow();
         });
 
         it("should identify video MIME types", () => {

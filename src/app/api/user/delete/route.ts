@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { del } from "@vercel/blob";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { handleNoteDeleted } from "@/lib/ai/embedding-sync";
 
 /**
  * DELETE /api/user/delete
@@ -23,6 +25,21 @@ export async function DELETE(request: Request) {
                 { status: 400 }
             );
         }
+
+        // Collect external resources (Pinecone vectors + Blob files) BEFORE the
+        // DB rows are removed, so we can purge them afterwards. Account deletion
+        // must fully erase the user's data from third-party stores (GDPR), not
+        // just Postgres.
+        const [notesToPurge, attachmentsToPurge] = await Promise.all([
+            prisma.note.findMany({
+                where: { userId },
+                select: { id: true, chunkCount: true },
+            }),
+            prisma.mediaAttachment.findMany({
+                where: { userId },
+                select: { url: true },
+            }),
+        ]);
 
         // Delete all user data in order (due to foreign key constraints)
         await prisma.$transaction(async (tx) => {
@@ -57,6 +74,24 @@ export async function DELETE(request: Request) {
             // Finally delete the user
             await tx.user.delete({ where: { id: userId } });
         });
+
+        // Purge external resources after the DB transaction commits. Failures
+        // here are logged but must NOT roll back the account deletion (the rows
+        // are already gone). Do NOT drop the Pinecone namespace — it is shared
+        // across all users, so we delete this user's vectors note-by-note.
+        await Promise.allSettled(
+            notesToPurge.map((note) =>
+                handleNoteDeleted(note.id, userId, note.chunkCount ?? undefined)
+            )
+        );
+
+        if (attachmentsToPurge.length > 0) {
+            try {
+                await del(attachmentsToPurge.map((a) => a.url));
+            } catch (blobError) {
+                console.error("Failed to delete some blobs during account deletion:", blobError);
+            }
+        }
 
         // Sign out the user
         try {
