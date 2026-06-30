@@ -627,10 +627,10 @@ export default function AIDumpPage() {
                                     onDragOver={handleDragOver}
                                     onDrop={handleDrop}
                                     className={cn(
-                                        "relative flex-1 min-h-[300px] border-2 border-dashed rounded-xl transition-all",
+                                        "relative flex-1 min-h-[300px] rounded-xl transition-all",
                                         isDragging
-                                            ? "border-primary bg-primary/5"
-                                            : "border-border hover:border-ring/50"
+                                            ? "border-2 border-dashed border-primary bg-primary/5"
+                                            : "border border-border/60"
                                     )}
                                 >
                                     {/* Drag overlay */}
