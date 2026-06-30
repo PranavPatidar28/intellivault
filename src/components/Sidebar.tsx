@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Inbox, Search, Settings, FolderOpen, Sparkles, Tag } from "lucide-react";
+import { Home, Inbox, Settings, FolderOpen, Sparkles, Tag } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -49,11 +49,6 @@ const items = [
     icon: FolderOpen,
   },
   {
-    title: "Search",
-    url: "#",
-    icon: Search,
-  },
-  {
     title: "Settings",
     url: "/settings",
     icon: Settings,
@@ -84,20 +79,29 @@ export function AppSidebar({ session }: AppSidebarProps) {
           <SidebarGroupLabel>Application</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    tooltip={item.title}
-                  >
-                    <Link href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {items.map((item) => {
+                // Dashboard is an exact match; section roots also highlight on
+                // their sub-routes (e.g. /notes/<id> keeps "Notes" active).
+                const isActive =
+                  item.url === "/dashboard"
+                    ? pathname === item.url
+                    : pathname === item.url ||
+                      pathname.startsWith(item.url + "/");
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={item.title}
+                    >
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

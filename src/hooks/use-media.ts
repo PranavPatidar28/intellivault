@@ -110,24 +110,27 @@ export function useMedia(options?: UseMediaOptions): UseMediaReturn {
                 throw new Error(data.error || "Failed to delete file")
             }
 
-            // Remove from local state
+            // Remove from local state. Decrement the offset by the one item we
+            // dropped so the next loadMore doesn't skip the record that shifted
+            // down into its place on the server. Using the functional updater
+            // keeps this race-safe when deleteMultiple fires concurrent deletes.
             setMedia(prev => prev.filter(item => item.url !== url))
+            setOffset(prev => Math.max(0, prev - 1))
             return true
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to delete file")
+            // Don't surface delete failures in the persistent fetch-error banner;
+            // callers report the outcome via a transient toast.
+            console.error("Failed to delete file:", err)
             return false
         }
     }, [])
 
     const deleteMultiple = useCallback(async (urls: string[]): Promise<number> => {
-        let deleted = 0
-
-        for (const url of urls) {
-            const success = await deleteMedia(url)
-            if (success) deleted++
-        }
-
-        return deleted
+        // Run deletes concurrently so the dialog doesn't hang for latency × N.
+        const results = await Promise.allSettled(urls.map((url) => deleteMedia(url)))
+        return results.filter(
+            (r) => r.status === "fulfilled" && r.value === true
+        ).length
     }, [deleteMedia])
 
     // Update filename in local state after successful rename

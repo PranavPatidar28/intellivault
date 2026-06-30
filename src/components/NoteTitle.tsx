@@ -32,6 +32,7 @@ export default function NoteTitle({ initialTitle, onTitleChange }: NoteTitleProp
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         placeholder="Untitled Note"
+        aria-label="Note title"
         className={cn(
           "w-full px-1 py-1",
           "text-xl font-bold tracking-tight",

@@ -44,8 +44,13 @@ export default function NotePage() {
   const [lastEditTime, setLastEditTime] = useState<Date | null>(null);
   const [tags, setTags] = useState<Tag[]>([]);
   const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
+  const [isContentEmpty, setIsContentEmpty] = useState(false);
+  const [nowTick, setNowTick] = useState(0);
   const editorRef = useRef<SimpleEditorRef>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  // Guards against overlapping manual + autosave PUTs (state lags inside the
+  // same tick, so we track the in-flight save in a ref too).
+  const isSavingRef = useRef(false);
 
   // Load AI sidebar state from localStorage
   useEffect(() => {
@@ -93,6 +98,11 @@ export default function NotePage() {
   }, [noteId, router]);
 
   const handleSaveNote = useCallback(async (isAutoSave: boolean = false) => {
+    // Prevent overlapping saves (manual Ctrl+S/button racing the autosave timer).
+    if (isSavingRef.current) {
+      return;
+    }
+
     if (!editorRef.current || !noteTitle.trim()) {
       if (!isAutoSave) {
         setErrorMessage("Title is required");
@@ -106,6 +116,10 @@ export default function NotePage() {
     const contentText = editorRef.current.getText();
 
     if (!contentJSON || !contentJSON.content || contentJSON.content.length === 0) {
+      // Empty content is not persisted. Surface this clearly rather than
+      // silently no-op'ing: keep the unsaved indicator and show why on a
+      // manual save. The Save button is also disabled while empty.
+      setIsContentEmpty(true);
       if (!isAutoSave) {
         setErrorMessage("Content cannot be empty");
         setSaveStatus("error");
@@ -113,6 +127,12 @@ export default function NotePage() {
       return;
     }
 
+    setIsContentEmpty(false);
+    // A manual save supersedes any pending autosave.
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    isSavingRef.current = true;
     setIsSaving(true);
     setSaveStatus("saving");
     setErrorMessage(null);
@@ -150,6 +170,7 @@ export default function NotePage() {
       setSaveStatus("error");
       setErrorMessage("Network error. Please check your connection.");
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
   }, [noteId, noteTitle, tags]);
@@ -168,6 +189,7 @@ export default function NotePage() {
     setHasUnsavedChanges(true);
     setLastEditTime(new Date());
     setSaveStatus(null);
+    setIsContentEmpty(false);
   }, []);
 
   const handleTitleChange = (newTitle: string) => {
@@ -214,8 +236,24 @@ export default function NotePage() {
         e.preventDefault();
         handleSaveNote(false);
       }
-      // Esc to go back
+
+      // Esc to go back — but only when it isn't being used to dismiss
+      // something else (Radix Select/dialog popovers call preventDefault) and
+      // focus isn't inside an editable surface where Esc has local meaning.
       if (e.key === "Escape") {
+        if (e.defaultPrevented) return;
+
+        const target = e.target as HTMLElement | null;
+        const inEditable =
+          !!target &&
+          (target.isContentEditable ||
+            ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+            !!target.closest('[role="dialog"], [role="listbox"], [contenteditable="true"], .ProseMirror'));
+        if (inEditable) return;
+
+        // An open overlay (delete dialog / mobile AI sheet) owns Escape.
+        if (showDeleteDialog) return;
+
         handleGoBack();
       }
 
@@ -228,7 +266,7 @@ export default function NotePage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleSaveNote, handleGoBack]);
+  }, [handleSaveNote, handleGoBack, showDeleteDialog]);
 
   // Warn before leaving with unsaved changes
   useEffect(() => {
@@ -242,6 +280,13 @@ export default function NotePage() {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
+
+  // Keep the "Saved X ago" relative timestamp fresh while the page stays open.
+  useEffect(() => {
+    if (!lastSaved) return;
+    const interval = setInterval(() => setNowTick((t) => t + 1), 60_000);
+    return () => clearInterval(interval);
+  }, [lastSaved]);
 
   const handleDeleteNote = async () => {
     setIsDeleting(true);
@@ -294,11 +339,15 @@ export default function NotePage() {
     );
   }
 
+  // Recomputed each minute via nowTick so the relative label doesn't go stale.
+  void nowTick;
+  const savedAgoLabel = lastSaved ? getRelativeTime(lastSaved) : null;
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <Topbar>
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <Button variant="ghost" size="icon" onClick={handleGoBack} className="shrink-0">
+          <Button variant="ghost" size="icon" onClick={handleGoBack} className="shrink-0" aria-label="Back to notes" title="Back to notes">
             <ArrowLeftIcon size={16} />
           </Button>
           <NoteTitle initialTitle={noteTitle} onTitleChange={handleTitleChange} />
@@ -308,29 +357,39 @@ export default function NotePage() {
 
         <div className="flex gap-2 items-center">
           <div className="flex gap-2 items-center">
-            {/* Last saved indicator */}
-            {lastSaved && !hasUnsavedChanges && (
+            {/* Save state — one clear indicator at a time */}
+            {saveStatus === "saving" || isSaving ? (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
+                <span>Saving…</span>
+              </div>
+            ) : saveStatus === "error" && errorMessage ? (
+              <div className="flex items-center gap-1 text-sm text-destructive">
+                <AlertCircleIcon size={16} />
+                <span>{errorMessage}</span>
+              </div>
+            ) : isContentEmpty ? (
+              <div className="flex items-center gap-1 text-xs text-destructive">
+                <AlertCircleIcon size={12} />
+                <span>Add content to save</span>
+              </div>
+            ) : hasUnsavedChanges ? (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <ClockIcon size={12} />
-                <span>Saved {getRelativeTime(lastSaved)}</span>
+                <span>Unsaved changes</span>
               </div>
-            )}
+            ) : saveStatus === "saved" ? (
+              <div className="flex items-center gap-1 text-sm text-green-600">
+                <CheckCircleIcon size={16} />
+                <span>Saved</span>
+              </div>
+            ) : savedAgoLabel ? (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <ClockIcon size={12} />
+                <span>Saved {savedAgoLabel}</span>
+              </div>
+            ) : null}
           </div>
-
-
-          {saveStatus === "saved" && (
-            <div className="flex items-center gap-1 text-sm text-green-600">
-              <CheckCircleIcon size={16} />
-              <span>Saved</span>
-            </div>
-          )}
-
-          {saveStatus === "error" && errorMessage && (
-            <div className="flex items-center gap-1 text-sm text-destructive">
-              <AlertCircleIcon size={16} />
-              <span>{errorMessage}</span>
-            </div>
-          )}
 
           <Button
             onClick={() => setShowDeleteDialog(true)}
@@ -353,7 +412,7 @@ export default function NotePage() {
 
           <Button
             onClick={() => handleSaveNote(false)}
-            disabled={isSaving || !hasUnsavedChanges}
+            disabled={isSaving || !hasUnsavedChanges || isContentEmpty}
             size="sm"
           >
             {isSaving ? (
@@ -412,12 +471,18 @@ export default function NotePage() {
           isOpen={isAISidebarOpen}
           onToggle={toggleAISidebar}
           onApplyTags={(tagNames) => {
-            const newTags = tagNames.map((name) => ({
-              id: `temp-${Date.now()}-${name}`,
-              name,
-              color: null,
-            }));
-            setTags((prev) => [...prev, ...newTags]);
+            setTags((prev) => {
+              const existing = new Set(prev.map((t) => t.name.toLowerCase()));
+              const newTags = tagNames
+                .filter((name) => !existing.has(name.toLowerCase()))
+                .map((name) => ({
+                  id: `temp-${Date.now()}-${name}`,
+                  name,
+                  color: null,
+                }));
+              if (newTags.length === 0) return prev;
+              return [...prev, ...newTags];
+            });
             setHasUnsavedChanges(true);
             setLastEditTime(new Date());
           }}
@@ -426,7 +491,7 @@ export default function NotePage() {
             setHasUnsavedChanges(true);
             setLastEditTime(new Date());
           }}
-          content={note.contentText}
+          content={editorRef.current?.getText() || note.contentText}
           initialSummary={note.summary}
           initialGeneratedTitle={note.generatedTitle}
         />

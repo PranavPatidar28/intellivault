@@ -21,6 +21,15 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
+import { getTextColorForBackground } from "@/lib/utils/tagColors";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Tag {
     id: string;
@@ -80,6 +89,7 @@ export function TagInspector({
     const [editedDescription, setEditedDescription] = useState("");
     const [relatedTags, setRelatedTags] = useState<RelatedTag[]>([]);
     const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+    const [noteToRemove, setNoteToRemove] = useState<Note | null>(null);
 
     // Fetch related tags when tag changes
     useEffect(() => {
@@ -163,6 +173,7 @@ export function TagInspector({
                             <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label="Edit tag name"
                                 onClick={() => {
                                     setEditedName(tag.name);
                                     setIsEditingName(true);
@@ -175,6 +186,7 @@ export function TagInspector({
                                     variant="ghost"
                                     size="icon"
                                     onClick={onToggleFavorite}
+                                    aria-label={tag.isFavorite ? "Remove from favorites" : "Add to favorites"}
                                     title={tag.isFavorite ? "Remove from favorites" : "Add to favorites"}
                                 >
                                     <Star size={16} className={tag.isFavorite ? "fill-yellow-500 text-yellow-500" : ""} />
@@ -185,6 +197,7 @@ export function TagInspector({
                                     variant="ghost"
                                     size="icon"
                                     onClick={onToggleArchive}
+                                    aria-label={tag.isArchived ? "Unarchive tag" : "Archive tag"}
                                     title={tag.isArchived ? "Unarchive" : "Archive"}
                                 >
                                     <Archive size={16} className={tag.isArchived ? "text-orange-500" : ""} />
@@ -200,7 +213,7 @@ export function TagInspector({
                     className="text-base px-4 py-2"
                     style={{
                         backgroundColor: tag.color || undefined,
-                        color: tag.color ? "#fff" : undefined,
+                        color: tag.color ? getTextColorForBackground(tag.color) : undefined,
                     }}
                 >
                     {tag.name}
@@ -365,7 +378,8 @@ export function TagInspector({
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => onRemoveNoteTag(note.id)}
+                                    aria-label={`Remove tag from "${note.title}"`}
+                                    onClick={() => setNoteToRemove(note)}
                                 >
                                     <Trash2 size={14} />
                                 </Button>
@@ -374,6 +388,39 @@ export function TagInspector({
                     )}
                 </CardContent>
             </Card>
+
+            {/* Remove-tag-from-note confirmation */}
+            <Dialog
+                open={noteToRemove !== null}
+                onOpenChange={(open) => {
+                    if (!open) setNoteToRemove(null);
+                }}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Remove tag from note?</DialogTitle>
+                        <DialogDescription>
+                            This removes the &ldquo;{tag.name}&rdquo; tag from
+                            {noteToRemove ? ` "${noteToRemove.title}"` : " this note"}. The note
+                            itself is not deleted.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setNoteToRemove(null)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => {
+                                if (noteToRemove) onRemoveNoteTag(noteToRemove.id);
+                                setNoteToRemove(null);
+                            }}
+                        >
+                            Remove tag
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div >
     );
 }

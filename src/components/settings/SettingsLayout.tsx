@@ -36,6 +36,13 @@ interface SettingsItemProps {
     description?: string;
     children: ReactNode;
     className?: string;
+    /**
+     * id of the control this item labels. When provided, the label is
+     * programmatically associated with the control (clickable + announced by
+     * screen readers). Omit for items whose control is not a single focusable
+     * element (e.g. a button group).
+     */
+    htmlFor?: string;
 }
 
 /**
@@ -46,11 +53,14 @@ export function SettingsItem({
     description,
     children,
     className,
+    htmlFor,
 }: SettingsItemProps) {
     return (
         <div className={`flex items-start justify-between gap-4 ${className || ""}`}>
             <div className="flex-1 space-y-0.5">
-                <label className="text-sm font-medium">{label}</label>
+                <label htmlFor={htmlFor} className="text-sm font-medium">
+                    {label}
+                </label>
                 {description && (
                     <p className="text-xs text-muted-foreground">{description}</p>
                 )}

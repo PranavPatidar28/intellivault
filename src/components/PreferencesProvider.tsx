@@ -15,7 +15,7 @@ import { DEFAULT_PREFERENCES } from "@/types/settings";
 interface PreferencesContextType {
     preferences: UserPreferences | null;
     isLoading: boolean;
-    updatePreferences: (updates: UserPreferencesUpdate) => Promise<void>;
+    updatePreferences: (updates: UserPreferencesUpdate) => Promise<boolean>;
 }
 
 const PreferencesContext = createContext<PreferencesContextType | null>(null);
@@ -30,7 +30,7 @@ export function usePreferences() {
         return {
             preferences: null,
             isLoading: true,
-            updatePreferences: async () => { },
+            updatePreferences: async () => false,
         };
     }
     return context;
@@ -97,7 +97,7 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
     }, [preferences]);
 
     const updatePreferences = useCallback(
-        async (updates: UserPreferencesUpdate) => {
+        async (updates: UserPreferencesUpdate): Promise<boolean> => {
             // Optimistic update
             const previousPreferences = preferences;
             if (preferences) {
@@ -117,6 +117,7 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
 
                 const data = await response.json();
                 setPreferences(data);
+                return true;
             } catch (error) {
                 // Rollback on error
                 setPreferences(previousPreferences);
@@ -126,6 +127,7 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
                     variant: "destructive",
                 });
                 console.error("Error updating preferences:", error);
+                return false;
             }
         },
         [preferences, toast]

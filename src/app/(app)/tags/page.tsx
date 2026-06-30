@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Topbar } from "@/components/Topbar";
 import { TagList } from "@/components/tags/TagList";
 import { TagInspector } from "@/components/tags/TagInspector";
@@ -8,11 +8,20 @@ import { MergeDialog, DeleteDialog } from "@/components/tags/TagActions";
 import { TagSkeleton, TagInspectorSkeleton } from "@/components/tags/TagSkeleton";
 import { BulkOperationProgressBar } from "@/components/tags/BulkOperationProgress";
 import { KeyboardShortcutsDialog } from "@/components/tags/KeyboardShortcutsDialog";
+import { TagAnalyticsDashboard } from "@/components/tags/TagAnalyticsDashboard";
 import { Button } from "@/components/ui/button";
+import {
+    Sheet,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet";
 import { useTagOperations } from "@/hooks/useTagOperations";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import { Star, Archive, FileWarning } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Star, Archive, FileWarning, Download, Upload, BarChart3 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 
 interface Tag {
     id: string;
@@ -60,6 +69,14 @@ export default function TagsPage() {
 
     // Keyboard shortcuts
     const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
+
+    // Import/Export
+    const [isImporting, setIsImporting] = useState(false);
+
+    // Analytics overlay
+    const [showAnalytics, setShowAnalytics] = useState(false);
+
+    const isMobile = useIsMobile();
 
     const tagOperations = useTagOperations();
 
@@ -162,17 +179,24 @@ export default function TagsPage() {
         setFilteredTags(result);
     }, [tags, searchQuery, showFavorites, showArchived, showOrphaned, sortBy, sortOrder]);
 
-    // Handle deep linking from URL
+    // Handle deep linking from URL — drive selection off the URL id directly so
+    // navigating to /tags?id=other updates the selection even when a tag is
+    // already selected (back/forward, NoteTags links, etc.).
     const searchParams = useSearchParams();
+    const tagIdFromUrl = searchParams.get("id");
+    // Track the last URL id we applied so this effect only reacts to an actual
+    // change in the param — not to selection or tag-list changes. Without this,
+    // clicking another tag in the list would instantly revert to the URL tag.
+    const lastAppliedUrlId = useRef<string | null>(null);
     useEffect(() => {
-        const tagIdFromUrl = searchParams.get("id");
-        if (tagIdFromUrl && tags.length > 0 && !selectedTag) {
+        if (tagIdFromUrl && tagIdFromUrl !== lastAppliedUrlId.current && tags.length > 0) {
             const tagToSelect = tags.find(t => t.id === tagIdFromUrl);
             if (tagToSelect) {
+                lastAppliedUrlId.current = tagIdFromUrl;
                 setSelectedTag(tagToSelect);
             }
         }
-    }, [searchParams, tags, selectedTag]);
+    }, [tagIdFromUrl, tags]);
 
     useEffect(() => {
         if (selectedTag) {
@@ -316,8 +340,13 @@ export default function TagsPage() {
     };
 
     const confirmBulkDelete = async () => {
+        const deletedIds = [...selectedTagIds];
         const count = await tagOperations.bulkDelete(selectedTagIds);
         if (count > 0) {
+            // Clear the inspector if the tag it's showing was just deleted.
+            if (selectedTag && deletedIds.includes(selectedTag.id)) {
+                setSelectedTag(null);
+            }
             setSelectedTagIds([]);
             setIsDeleteDialogOpen(false);
             await fetchTags();
@@ -328,6 +357,7 @@ export default function TagsPage() {
         const count = await tagOperations.bulkRecolor(selectedTagIds, color);
         if (count > 0) {
             await fetchTags();
+            if (selectedTag) await fetchTagDetails(selectedTag.id);
         }
     };
 
@@ -339,11 +369,15 @@ export default function TagsPage() {
     };
 
     const confirmMerge = async (targetTagId: string) => {
-        const count = await tagOperations.mergeTags(
-            selectedTagIds.filter(id => id !== targetTagId),
-            targetTagId
-        );
-        if (count >= 0) {
+        const mergedSources = selectedTagIds.filter(id => id !== targetTagId);
+        const count = await tagOperations.mergeTags(mergedSources, targetTagId);
+        // mergeTags returns null on failure and a (possibly zero) count on success,
+        // so only run the success branch when it isn't null.
+        if (count !== null) {
+            // The inspected tag may have been merged away.
+            if (selectedTag && mergedSources.includes(selectedTag.id)) {
+                setSelectedTag(null);
+            }
             setSelectedTagIds([]);
             setIsMergeDialogOpen(false);
             await fetchTags();
@@ -362,7 +396,8 @@ export default function TagsPage() {
                 throw new Error("Failed to fetch note");
             }
 
-            // Remove the tag
+            // Remove the tag, keyed by id (names can collide). The PUT endpoint
+            // resolves tags by name, so we send the remaining names.
             const updatedTags = noteData.note.tags
                 .filter((t: any) => t.id !== selectedTag.id)
                 .map((t: any) => t.name);
@@ -375,28 +410,83 @@ export default function TagsPage() {
 
             const data = await response.json();
 
-            if (data.success) {
-                await fetchTagDetails(selectedTag.id);
-                await fetchTags();
+            if (!data.success) {
+                throw new Error(data.error || "Failed to update note");
             }
+
+            toast.success("Tag removed from note");
+            await fetchTagDetails(selectedTag.id);
+            await fetchTags();
         } catch (error) {
             console.error("Failed to remove tag from note:", error);
+            toast.error("Couldn't remove tag", {
+                description: error instanceof Error ? error.message : undefined,
+            });
+        }
+    };
+
+    // Export / Import
+    const handleExport = async (format: "json" | "csv") => {
+        try {
+            const response = await fetch("/api/tags/export", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ format }),
+            });
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || "Export failed");
+            }
+            const blob = new Blob([data.data], {
+                type: format === "json" ? "application/json" : "text/csv",
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = data.filename || `tags-export.${format}`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            toast.success(`Exported tags as ${format.toUpperCase()}`);
+        } catch (error) {
+            toast.error("Couldn't export tags", {
+                description: error instanceof Error ? error.message : undefined,
+            });
+        }
+    };
+
+    const handleImportFile = async (file: File) => {
+        const format: "json" | "csv" = file.name.toLowerCase().endsWith(".csv")
+            ? "csv"
+            : "json";
+        setIsImporting(true);
+        try {
+            const text = await file.text();
+            const response = await fetch("/api/tags/import", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ data: text, format, strategy: "merge" }),
+            });
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || "Import failed");
+            }
+            toast.success("Tags imported", {
+                description: `${data.imported} imported, ${data.skipped} skipped`,
+            });
+            await fetchTags();
+        } catch (error) {
+            toast.error("Couldn't import tags", {
+                description: error instanceof Error ? error.message : undefined,
+            });
+        } finally {
+            setIsImporting(false);
         }
     };
 
     // Keyboard shortcuts definition
     const keyboardShortcuts = [
-        {
-            key: "F",
-            ctrl: true,
-            handler: () => {
-                // Focus search input - handled via prop in TagList if we add a ref there
-                // For now, we'll just log or maybe add a ref to TagList later
-                const searchInput = document.querySelector('input[placeholder="Search tags..."]') as HTMLInputElement;
-                if (searchInput) searchInput.focus();
-            },
-            description: "Focus search",
-        },
         {
             key: "A",
             ctrl: true,
@@ -446,15 +536,15 @@ export default function TagsPage() {
 
     if (isLoading) {
         return (
-            <div className="h-screen flex flex-col">
+            <div className="h-full flex flex-col">
                 <Topbar>
                     <div className="text-lg font-semibold">Tags</div>
                 </Topbar>
                 <div className="flex-1 flex overflow-hidden">
-                    <div className="w-1/2 border-r p-4">
+                    <div className="w-full md:w-1/2 border-r p-4">
                         <TagSkeleton count={12} />
                     </div>
-                    <div className="flex-1 p-6">
+                    <div className="hidden md:block flex-1 p-6">
                         <TagInspectorSkeleton />
                     </div>
                 </div>
@@ -463,46 +553,100 @@ export default function TagsPage() {
     }
 
     return (
-        <div className="h-screen flex flex-col">
+        <div className="h-full flex flex-col">
             <Topbar>
-                <div className="flex items-center justify-between w-full">
-                    <div className="text-lg font-semibold">Tags</div>
+                <div className="flex items-center justify-between w-full gap-2">
+                    <div className="text-lg font-semibold shrink-0">Tags</div>
 
-                    {/* Filter Toggles */}
-                    <div className="flex gap-2">
+                    {/* Filter toggles + import/export. Wraps on narrow screens and
+                        collapses button labels behind sm: so it never overflows. */}
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                         <Button
                             variant={showFavorites ? "default" : "outline"}
                             size="sm"
                             onClick={() => setShowFavorites(!showFavorites)}
+                            aria-pressed={showFavorites}
                         >
-                            <Star size={14} className="mr-1" />
-                            Favorites
+                            <Star size={14} className="sm:mr-1" />
+                            <span className="hidden sm:inline">Favorites</span>
                         </Button>
                         <Button
                             variant={showArchived ? "default" : "outline"}
                             size="sm"
                             onClick={() => setShowArchived(!showArchived)}
+                            aria-pressed={showArchived}
                         >
-                            <Archive size={14} className="mr-1" />
-                            Archived
+                            <Archive size={14} className="sm:mr-1" />
+                            <span className="hidden sm:inline">Archived</span>
                         </Button>
                         <Button
                             variant={showOrphaned ? "default" : "outline"}
                             size="sm"
                             onClick={() => setShowOrphaned(!showOrphaned)}
+                            aria-pressed={showOrphaned}
                         >
-                            <FileWarning size={14} className="mr-1" />
-                            Orphaned
+                            <FileWarning size={14} className="sm:mr-1" />
+                            <span className="hidden sm:inline">Orphaned</span>
                         </Button>
+
+                        <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
+
+                        <Button
+                            variant={showAnalytics ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setShowAnalytics((v) => !v)}
+                            aria-pressed={showAnalytics}
+                            aria-label="Toggle tag analytics"
+                        >
+                            <BarChart3 size={14} className="sm:mr-1" />
+                            <span className="hidden sm:inline">Analytics</span>
+                        </Button>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleExport("json")}
+                            aria-label="Export tags as JSON"
+                        >
+                            <Download size={14} className="sm:mr-1" />
+                            <span className="hidden sm:inline">Export</span>
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isImporting}
+                            onClick={() => document.getElementById("tag-import-input")?.click()}
+                            aria-label="Import tags from a file"
+                        >
+                            <Upload size={14} className="sm:mr-1" />
+                            <span className="hidden sm:inline">
+                                {isImporting ? "Importing..." : "Import"}
+                            </span>
+                        </Button>
+                        <input
+                            id="tag-import-input"
+                            type="file"
+                            accept=".json,.csv,application/json,text/csv"
+                            className="hidden"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleImportFile(file);
+                                e.target.value = "";
+                            }}
+                        />
                     </div>
                 </div>
             </Topbar>
 
-
+            {showAnalytics && (
+                <div className="border-b bg-muted/30 p-4 overflow-y-auto max-h-[45vh]">
+                    <TagAnalyticsDashboard />
+                </div>
+            )}
 
             <div className="flex-1 flex overflow-hidden">
-                {/* Left Pane - Tag List */}
-                <div className="w-1/2 border-r">
+                {/* Left Pane - Tag List (full width on mobile, half on md+) */}
+                <div className="w-full md:w-1/2 md:border-r">
                     <TagList
                         tags={filteredTags}
                         selectedTag={selectedTag}
@@ -519,22 +663,56 @@ export default function TagsPage() {
                     />
                 </div>
 
-                {/* Right Pane - Tag Inspector */}
-                <div className="flex-1">
-                    <TagInspector
-                        tag={selectedTag}
-                        topNotes={topNotes}
-                        onRename={handleRename}
-                        onRecolor={handleRecolor}
-                        onDelete={handleDelete}
-                        onMerge={handleMerge}
-                        onRemoveNoteTag={handleRemoveNoteTag}
-                        onUpdateDescription={handleUpdateDescription}
-                        onToggleFavorite={handleToggleFavorite}
-                        onToggleArchive={handleToggleArchive}
-                    />
-                </div>
+                {/* Right Pane - Tag Inspector (inline on md+). Rendered only when
+                    not mobile so the mobile Sheet copy is the single instance and
+                    related-tag fetches don't fire twice. */}
+                {!isMobile && (
+                    <div className="hidden md:block flex-1">
+                        <TagInspector
+                            tag={selectedTag}
+                            topNotes={topNotes}
+                            onRename={handleRename}
+                            onRecolor={handleRecolor}
+                            onDelete={handleDelete}
+                            onMerge={handleMerge}
+                            onRemoveNoteTag={handleRemoveNoteTag}
+                            onUpdateDescription={handleUpdateDescription}
+                            onToggleFavorite={handleToggleFavorite}
+                            onToggleArchive={handleToggleArchive}
+                        />
+                    </div>
+                )}
             </div>
+
+            {/* Mobile inspector — slides in as a sheet when a tag is selected */}
+            {isMobile && (
+                <Sheet
+                    open={!!selectedTag}
+                    onOpenChange={(open) => {
+                        if (!open) setSelectedTag(null);
+                    }}
+                >
+                    <SheetContent side="right" className="w-full p-0 sm:max-w-md">
+                        <SheetHeader className="sr-only">
+                            <SheetTitle>Tag details</SheetTitle>
+                        </SheetHeader>
+                        <div className="h-full overflow-hidden pt-2">
+                            <TagInspector
+                                tag={selectedTag}
+                                topNotes={topNotes}
+                                onRename={handleRename}
+                                onRecolor={handleRecolor}
+                                onDelete={handleDelete}
+                                onMerge={handleMerge}
+                                onRemoveNoteTag={handleRemoveNoteTag}
+                                onUpdateDescription={handleUpdateDescription}
+                                onToggleFavorite={handleToggleFavorite}
+                                onToggleArchive={handleToggleArchive}
+                            />
+                        </div>
+                    </SheetContent>
+                </Sheet>
+            )}
 
             {/* Bulk Operation Progress */}
             {tagOperations.progress && (

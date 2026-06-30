@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { ClockIcon, Trash2Icon, Sparkles, BookOpen, MoreVertical, Copy, Pin, Tag, Paperclip, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
 import { getRelativeTime, truncateText } from "@/lib/utils/text";
 import { Badge } from "./ui/badge";
+import { toast } from "sonner";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -21,15 +22,15 @@ interface NoteListItemProps {
     contentText: string;
     summary?: string | null;
     tags?: { id: string; name: string; color: string | null }[];
-    createdAt: Date;
-    updatedAt?: Date;
+    createdAt: Date | string;
+    updatedAt?: Date | string;
     isPinned?: boolean;
     attachmentCount?: number;
     onPin?: (id: string, isPinned: boolean) => void;
     onDelete?: (id: string) => void;
 }
 
-export default function NoteListItem({
+function NoteListItem({
     id,
     title,
     contentText,
@@ -57,7 +58,10 @@ export default function NoteListItem({
         router.push(`/notes/${id}`);
     };
 
+    // Only navigate when the row itself is the keydown target, so activating the
+    // inner time-toggle/dropdown buttons via keyboard doesn't also navigate.
     const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             router.push(`/notes/${id}`);
@@ -71,7 +75,12 @@ export default function NoteListItem({
 
     const handleCopy = async (e: React.MouseEvent) => {
         e.stopPropagation();
-        await navigator.clipboard.writeText(contentText || "");
+        try {
+            await navigator.clipboard.writeText(contentText || "");
+            toast.success("Content copied to clipboard");
+        } catch {
+            toast.error("Couldn't copy to clipboard");
+        }
     };
 
     const toggleTimeDisplay = (e: React.MouseEvent) => {
@@ -79,7 +88,7 @@ export default function NoteListItem({
         setShowUpdatedTime(!showUpdatedTime);
     };
 
-    const displayTime = showUpdatedTime && updatedAt ? updatedAt : createdAt;
+    const displayTime = showUpdatedTime && updatedAt ? new Date(updatedAt) : new Date(createdAt);
     const timeLabel = showUpdatedTime && updatedAt ? "Updated" : "Created";
 
     return (
@@ -148,7 +157,7 @@ export default function NoteListItem({
                         <BookOpen size={11} />
                         {readingStats.wordCount}w
                     </span>
-                    {attachmentCount && attachmentCount > 0 && (
+                    {!!attachmentCount && attachmentCount > 0 && (
                         <span className="flex items-center gap-1 text-primary/70">
                             <Paperclip size={11} />
                             {attachmentCount}
@@ -159,8 +168,10 @@ export default function NoteListItem({
                 {/* Time */}
                 <button
                     onClick={toggleTimeDisplay}
+                    onKeyDown={(e) => e.stopPropagation()}
                     className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors shrink-0 min-w-[80px]"
                     title={`Click to toggle. ${displayTime.toLocaleString()}`}
+                    aria-label={`${timeLabel} ${displayTime.toLocaleString()}. Click to toggle between created and updated time.`}
                 >
                     <ClockIcon size={11} />
                     <span>{getRelativeTime(displayTime)}</span>
@@ -175,6 +186,8 @@ export default function NoteListItem({
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            title="More options"
+                            aria-label="More options"
                         >
                             <MoreVertical size={14} />
                         </Button>
@@ -212,3 +225,5 @@ export default function NoteListItem({
         </div>
     );
 }
+
+export default memo(NoteListItem);

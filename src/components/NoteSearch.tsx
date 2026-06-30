@@ -5,20 +5,18 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, FileText, Calendar, Hash } from "lucide-react";
 import { useSemanticSearch } from "@/hooks/use-semantic-search";
 import { useDebounce } from "@/hooks/useDebounce";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { getRelativeTime } from "@/lib/utils/text";
 
+const LISTBOX_ID = "note-search-listbox";
+const optionId = (index: number) => `note-search-option-${index}`;
+
 export function NoteSearch() {
     const router = useRouter();
     const [open, setOpen] = React.useState(false);
+    const [activeIndex, setActiveIndex] = React.useState(-1);
     const { query, setQuery, results, isLoading, search, clear } = useSemanticSearch();
     const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -26,6 +24,11 @@ export function NoteSearch() {
     const debouncedSearch = useDebounce((q: string) => {
         search(q);
     }, 400);
+
+    // Reset the active option whenever the result set changes
+    React.useEffect(() => {
+        setActiveIndex(-1);
+    }, [results]);
 
     const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -42,6 +45,7 @@ export function NoteSearch() {
 
     const handleSelect = (noteId: string) => {
         setOpen(false);
+        setActiveIndex(-1);
         setQuery("");
         clear();
         router.push(`/notes/${noteId}`);
@@ -50,7 +54,38 @@ export function NoteSearch() {
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Escape") {
             setOpen(false);
+            setActiveIndex(-1);
             inputRef.current?.blur();
+            return;
+        }
+
+        if (!open || results.length === 0) {
+            // Allow ArrowDown to reopen a populated dropdown
+            if (e.key === "ArrowDown" && query.trim() && results.length > 0) {
+                e.preventDefault();
+                setOpen(true);
+                setActiveIndex(0);
+            }
+            return;
+        }
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setActiveIndex((prev) => (prev + 1) % results.length);
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setActiveIndex((prev) => (prev <= 0 ? results.length - 1 : prev - 1));
+        } else if (e.key === "Enter") {
+            if (activeIndex >= 0 && activeIndex < results.length) {
+                e.preventDefault();
+                handleSelect(results[activeIndex].id);
+            }
+        } else if (e.key === "Home") {
+            e.preventDefault();
+            setActiveIndex(0);
+        } else if (e.key === "End") {
+            e.preventDefault();
+            setActiveIndex(results.length - 1);
         }
     };
 
@@ -66,6 +101,8 @@ export function NoteSearch() {
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, []);
 
+    const isExpanded = open && !!query.trim();
+
     return (
         <div className="relative w-full max-w-sm sm:max-w-md lg:max-w-lg">
             <div className="relative">
@@ -73,6 +110,14 @@ export function NoteSearch() {
                 <Input
                     ref={inputRef}
                     type="search"
+                    role="combobox"
+                    aria-label="Search notes"
+                    aria-expanded={isExpanded}
+                    aria-controls={LISTBOX_ID}
+                    aria-autocomplete="list"
+                    aria-activedescendant={
+                        isExpanded && activeIndex >= 0 ? optionId(activeIndex) : undefined
+                    }
                     placeholder="Search notes... (Cmd+K)"
                     className="pl-9 pr-4 w-full bg-background/50 border-muted-foreground/20 focus:bg-background transition-all"
                     value={query}
@@ -89,18 +134,32 @@ export function NoteSearch() {
                 )}
             </div>
 
-            {open && query.trim() && (
+            {isExpanded && (
                 <div className="absolute top-full left-0 right-0 mt-2 p-1 bg-popover text-popover-foreground rounded-lg border shadow-lg z-50 animate-in fade-in-0 zoom-in-95 overflow-hidden">
                     {results.length > 0 ? (
-                        <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+                        <div
+                            id={LISTBOX_ID}
+                            role="listbox"
+                            aria-label="Search results"
+                            className="max-h-[60vh] overflow-y-auto custom-scrollbar"
+                        >
                             <div className="p-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                 Semantic Matches
                             </div>
-                            {results.map((result) => (
+                            {results.map((result, index) => (
                                 <div
                                     key={`${result.id}-${result.chunkIndex}`}
+                                    id={optionId(index)}
+                                    role="option"
+                                    aria-selected={index === activeIndex}
                                     onClick={() => handleSelect(result.id)}
-                                    className="flex flex-col gap-1 p-3 rounded-md hover:bg-muted/50 cursor-pointer transition-colors group"
+                                    onMouseEnter={() => setActiveIndex(index)}
+                                    className={cn(
+                                        "flex flex-col gap-1 p-3 rounded-md cursor-pointer transition-colors group",
+                                        index === activeIndex
+                                            ? "bg-muted"
+                                            : "hover:bg-muted/50"
+                                    )}
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2 font-medium text-sm text-foreground/90">
@@ -154,6 +213,7 @@ export function NoteSearch() {
             {open && (
                 <div
                     className="fixed inset-0 z-40 bg-transparent"
+                    aria-hidden="true"
                     onClick={() => setOpen(false)}
                 />
             )}
@@ -161,21 +221,35 @@ export function NoteSearch() {
     );
 }
 
+// Escape regex metacharacters so user queries like "c++" or "foo(" don't
+// produce an invalid pattern that throws during render.
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // Helper to highlight matching terms in preview
 function highlightMatch(text: string, query: string) {
     if (!query || !text) return text;
 
-    // Very basic word matching for highlights
-    // Ideally use a more robust highlighter or regex based on query terms
+    // Match whole-ish query words (length > 2) for highlights
     const words = query.split(/\s+/).filter(w => w.length > 2);
     if (words.length === 0) return text;
 
-    const parts = text.split(new RegExp(`(${words.join("|")})`, "gi"));
+    let regex: RegExp;
+    try {
+        regex = new RegExp(`(${words.map(escapeRegExp).join("|")})`, "gi");
+    } catch {
+        // Defensive: if pattern construction still fails, render plain text
+        return text;
+    }
+
+    const parts = text.split(regex);
+    const lowered = words.map(w => w.toLowerCase());
 
     return (
         <span>
             {parts.map((part, i) => {
-                const isMatch = words.some(w => part.toLowerCase() === w.toLowerCase());
+                const isMatch = lowered.includes(part.toLowerCase());
                 return isMatch ? (
                     <span key={i} className="bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 font-medium rounded-sm px-0.5">
                         {part}

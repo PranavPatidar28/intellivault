@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { ClockIcon, Trash2Icon, Sparkles, BookOpen, MoreVertical, Copy, Pin, Tag, Share2, Paperclip } from "lucide-react";
 import {
   Card,
@@ -13,6 +13,7 @@ import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
 import { getRelativeTime, truncateText } from "@/lib/utils/text";
 import { Badge } from "./ui/badge";
+import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,14 +29,14 @@ interface NoteCardProps {
   contentText: string;
   summary?: string | null;
   tags?: { id: string; name: string; color: string | null }[];
-  createdAt: Date;
-  updatedAt?: Date;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
   isPinned?: boolean;
   attachmentCount?: number;
   onPin?: (id: string, isPinned: boolean) => void;
 }
 
-export default function NotesCard({
+function NotesCard({
   id,
   title,
   contentText,
@@ -63,7 +64,11 @@ export default function NotesCard({
     router.push(`/notes/${id}`);
   };
 
+  // Only navigate when the card itself is the keydown target. Inner controls
+  // (time toggle, dropdown trigger) are real buttons; their Enter/Space presses
+  // bubble here, so without this guard activating them would also navigate.
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       router.push(`/notes/${id}`);
@@ -77,7 +82,12 @@ export default function NotesCard({
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    await navigator.clipboard.writeText(contentText || "");
+    try {
+      await navigator.clipboard.writeText(contentText || "");
+      toast.success("Content copied to clipboard");
+    } catch {
+      toast.error("Couldn't copy to clipboard");
+    }
   };
 
   const toggleTimeDisplay = (e: React.MouseEvent) => {
@@ -85,7 +95,7 @@ export default function NotesCard({
     setShowUpdatedTime(!showUpdatedTime);
   };
 
-  const displayTime = showUpdatedTime && updatedAt ? updatedAt : createdAt;
+  const displayTime = showUpdatedTime && updatedAt ? new Date(updatedAt) : new Date(createdAt);
   const timeLabel = showUpdatedTime && updatedAt ? "Updated" : "Created";
 
   // Responsive tag count: show 2 on mobile, 3 on larger screens
@@ -132,6 +142,7 @@ export default function NotesCard({
               size="icon"
               className="h-8 w-8 sm:h-7 sm:w-7 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-full touch-manipulation"
               title="More options"
+              aria-label="More options"
             >
               <MoreVertical size={16} />
             </Button>
@@ -180,8 +191,10 @@ export default function NotesCard({
         <CardDescription>
           <button
             onClick={toggleTimeDisplay}
+            onKeyDown={(e) => e.stopPropagation()}
             className="flex items-center gap-1.5 text-xs text-muted-foreground/80 hover:text-muted-foreground transition-colors"
             title={`Click to toggle. ${displayTime.toLocaleString()}`}
+            aria-label={`${timeLabel} ${displayTime.toLocaleString()}. Click to toggle between created and updated time.`}
           >
             <ClockIcon size={12} />
             <span>
@@ -244,7 +257,7 @@ export default function NotesCard({
             </span>
             <span>•</span>
             <span>{readingStats.readingTime} min read</span>
-            {attachmentCount && attachmentCount > 0 && (
+            {!!attachmentCount && attachmentCount > 0 && (
               <>
                 <span>•</span>
                 <span className="flex items-center gap-1 text-primary/70">
@@ -259,3 +272,5 @@ export default function NotesCard({
     </Card>
   );
 }
+
+export default memo(NotesCard);

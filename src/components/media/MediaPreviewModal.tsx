@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,6 +46,7 @@ export function MediaPreviewModal({
     }, [item?.id])
 
     const loadNoteUsage = async (id: string) => {
+        setUsedInNotes([])
         setIsLoadingNotes(true)
         try {
             const res = await fetch(`/api/files/${id}`)
@@ -113,7 +114,6 @@ export function MediaPreviewModal({
                     <video
                         src={contentUrl}
                         controls
-                        autoPlay
                         className="max-h-[70vh] max-w-full rounded-lg"
                     >
                         Your browser does not support video playback.
@@ -125,7 +125,6 @@ export function MediaPreviewModal({
                         <audio
                             src={contentUrl}
                             controls
-                            autoPlay
                             className="w-full"
                         >
                             Your browser does not support audio playback.
@@ -164,6 +163,9 @@ export function MediaPreviewModal({
             <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden">
                 <VisuallyHidden>
                     <DialogTitle>Preview: {item.filename}</DialogTitle>
+                    <DialogDescription>
+                        Preview, rename, download, or delete {item.filename}.
+                    </DialogDescription>
                 </VisuallyHidden>
 
                 {/* Header */}
@@ -182,6 +184,7 @@ export function MediaPreviewModal({
                                     size="icon"
                                     variant="ghost"
                                     className="h-8 w-8"
+                                    aria-label="Save name"
                                     onClick={handleSaveRename}
                                     disabled={isSaving}
                                 >
@@ -195,6 +198,7 @@ export function MediaPreviewModal({
                                     size="icon"
                                     variant="ghost"
                                     className="h-8 w-8"
+                                    aria-label="Cancel rename"
                                     onClick={() => {
                                         setEditedName(item.filename)
                                         setIsEditing(false)
@@ -212,6 +216,7 @@ export function MediaPreviewModal({
                                     size="icon"
                                     variant="ghost"
                                     className="h-6 w-6 opacity-60 hover:opacity-100"
+                                    aria-label="Rename file"
                                     onClick={() => setIsEditing(true)}
                                 >
                                     <Pencil className="h-3 w-3" />
@@ -242,7 +247,7 @@ export function MediaPreviewModal({
                             <Trash2 className="h-4 w-4 mr-1" />
                             Delete
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={onClose}>
+                        <Button variant="ghost" size="icon" aria-label="Close preview" onClick={onClose}>
                             <X className="h-4 w-4" />
                         </Button>
                     </div>

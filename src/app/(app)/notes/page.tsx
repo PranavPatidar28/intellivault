@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
-import { PlusSquareIcon, AlertCircleIcon, LayoutGrid, List, ArrowUpDown, Filter, X, Check } from "lucide-react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { PlusSquareIcon, AlertCircleIcon, LayoutGrid, List, ArrowUpDown, Filter, Loader2 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,8 +66,8 @@ const NotesGrid = ({ notes, onDelete, onPin }: {
         title={title}
         contentText={typeof contentText === "string" ? contentText : JSON.stringify(contentText)}
         summary={summary}
-        createdAt={new Date(createdAt)}
-        updatedAt={updatedAt ? new Date(updatedAt) : undefined}
+        createdAt={createdAt}
+        updatedAt={updatedAt}
         tags={tags}
         isPinned={isPinned}
         attachmentCount={attachmentCount}
@@ -91,8 +91,8 @@ const NotesList = ({ notes, onDelete, onPin }: {
         title={title}
         contentText={typeof contentText === "string" ? contentText : JSON.stringify(contentText)}
         summary={summary}
-        createdAt={new Date(createdAt)}
-        updatedAt={updatedAt ? new Date(updatedAt) : undefined}
+        createdAt={createdAt}
+        updatedAt={updatedAt}
         tags={tags}
         isPinned={isPinned}
         attachmentCount={attachmentCount}
@@ -144,7 +144,20 @@ export default function NotesPage() {
   const [sortBy, setSortBy] = useState<SortOption>("updatedAt");
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const { notes, isLoading, error, refetch, optimisticTogglePin } = useNotes();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const {
+    notes,
+    isLoading,
+    isLoadingMore,
+    error,
+    total,
+    hasMore,
+    refetch,
+    loadMore,
+    optimisticTogglePin,
+    optimisticRemoveNote,
+    restoreNote,
+  } = useNotes();
   const { toast } = useToast();
   const { preferences } = usePreferences();
   const hasAppliedPreferences = useRef(false);
@@ -236,6 +249,15 @@ export default function NotesPage() {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
 
+      // Within the pinned group, order by most-recently-pinned first so a
+      // just-pinned note jumps to the top (matches the "appear at the top" toast
+      // and the optimistic hook behavior).
+      if (a.isPinned && b.isPinned) {
+        const aPinned = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+        const bPinned = b.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+        if (aPinned !== bPinned) return bPinned - aPinned;
+      }
+
       // Then sort by selected option
       switch (sortBy) {
         case "updatedAt":
@@ -254,15 +276,25 @@ export default function NotesPage() {
     return sorted;
   }, [notes, sortBy, filterTags]);
 
-  const handleDeleteRequest = (id: string) => {
+  const handleDeleteRequest = useCallback((id: string) => {
     setNoteToDelete(id);
-  };
+  }, []);
 
   const confirmDelete = async () => {
-    if (!noteToDelete) return;
+    if (!noteToDelete || isDeleting) return;
+
+    // Capture the note + its position before removing, so we can restore on failure.
+    const removalIndex = notes.findIndex((n) => n.id === noteToDelete);
+    setIsDeleting(true);
+
+    // Optimistically remove from the list so it disappears in place (no full
+    // skeleton flash, scroll position preserved).
+    const removed = optimisticRemoveNote(noteToDelete);
+    const id = noteToDelete;
+    setNoteToDelete(null);
 
     try {
-      const response = await fetch(`/api/notes/${noteToDelete}`, {
+      const response = await fetch(`/api/notes/${id}`, {
         method: "DELETE",
       });
 
@@ -271,22 +303,23 @@ export default function NotesPage() {
           title: "Note deleted",
           description: "The note has been successfully deleted.",
         });
-        refetch();
       } else {
         throw new Error("Failed to delete note");
       }
-    } catch (error) {
+    } catch {
+      // Restore the note to its original position on failure.
+      if (removed) restoreNote(removed, removalIndex);
       toast({
         title: "Error",
         description: "Failed to delete note. Please try again.",
         variant: "destructive",
       });
     } finally {
-      setNoteToDelete(null);
+      setIsDeleting(false);
     }
   };
 
-  const handlePin = async (id: string, currentlyPinned: boolean) => {
+  const handlePin = useCallback(async (id: string, currentlyPinned: boolean) => {
     optimisticTogglePin(id);
 
     toast({
@@ -312,7 +345,7 @@ export default function NotesPage() {
         variant: "destructive",
       });
     }
-  };
+  }, [optimisticTogglePin, toast]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -463,7 +496,7 @@ export default function NotesPage() {
         <AddNoteModal
           isAddNoteModalOpen={isAddNoteModalOpen}
           setIsAddNoteModalOpen={setIsAddNoteModalOpen}
-          onNoteCreated={refetch}
+          onNoteCreated={() => refetch({ silent: true })}
         />
       )}
 
@@ -483,7 +516,7 @@ export default function NotesPage() {
               <p className="text-sm text-muted-foreground mb-4 max-w-md text-center">
                 {error}
               </p>
-              <Button onClick={refetch} variant="outline">
+              <Button onClick={() => refetch()} variant="outline">
                 Try Again
               </Button>
             </div>
@@ -492,17 +525,45 @@ export default function NotesPage() {
 
         {/* Success State */}
         {!isLoading && !error && (
-          <NotesArea
-            notes={filteredAndSortedNotes}
-            onDelete={handleDeleteRequest}
-            onPin={handlePin}
-            viewMode={viewMode}
-            hasFilters={filterTags.length > 0}
-          />
+          <>
+            <NotesArea
+              notes={filteredAndSortedNotes}
+              onDelete={handleDeleteRequest}
+              onPin={handlePin}
+              viewMode={viewMode}
+              hasFilters={filterTags.length > 0}
+            />
+
+            {/* Pagination: showing X of N + Load more */}
+            {total > 0 && notes.length > 0 && (
+              <div className="flex flex-col items-center gap-3 px-4 pb-8 pt-2">
+                <p className="text-xs text-muted-foreground" aria-live="polite">
+                  Showing {notes.length} of {total} {total === 1 ? "note" : "notes"}
+                </p>
+                {hasMore && (
+                  <Button
+                    variant="outline"
+                    onClick={loadMore}
+                    disabled={isLoadingMore}
+                    className="min-w-[140px]"
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <Loader2 size={16} className="mr-2 animate-spin" />
+                        Loading
+                      </>
+                    ) : (
+                      "Load more"
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      <Dialog open={!!noteToDelete} onOpenChange={(open) => !open && setNoteToDelete(null)}>
+      <Dialog open={!!noteToDelete} onOpenChange={(open) => !open && !isDeleting && setNoteToDelete(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Note</DialogTitle>
@@ -511,11 +572,18 @@ export default function NotesPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNoteToDelete(null)}>
+            <Button variant="outline" onClick={() => setNoteToDelete(null)} disabled={isDeleting}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
-              Delete
+            <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting ? (
+                <>
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                  Deleting
+                </>
+              ) : (
+                "Delete"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

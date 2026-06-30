@@ -20,6 +20,7 @@ import {
 } from "./SettingsLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
     Dialog,
@@ -182,13 +183,13 @@ export function DataPrivacySettings() {
                 <SettingsItem
                     label="Analytics"
                     description="Help improve IntelliVault by sharing anonymous usage data"
+                    htmlFor="analytics-enabled"
                 >
-                    <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    <Checkbox
+                        id="analytics-enabled"
                         checked={preferences?.analyticsEnabled ?? true}
-                        onChange={(e) =>
-                            updatePreferences({ analyticsEnabled: e.target.checked })
+                        onCheckedChange={(checked) =>
+                            updatePreferences({ analyticsEnabled: checked === true })
                         }
                     />
                 </SettingsItem>
@@ -204,7 +205,16 @@ export function DataPrivacySettings() {
                             Permanently delete your account and all associated data. This
                             action cannot be undone.
                         </p>
-                        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                        <Dialog
+                            open={showDeleteDialog}
+                            onOpenChange={(open) => {
+                                setShowDeleteDialog(open);
+                                // Clear the typed phrase whenever the dialog closes
+                                // (Cancel, Escape, or overlay click) so reopening
+                                // always requires retyping the confirmation.
+                                if (!open) setDeleteConfirmation("");
+                            }}
+                        >
                             <DialogTrigger asChild>
                                 <Button variant="destructive" size="sm" className="gap-2">
                                     <Trash2 className="h-4 w-4" />
@@ -232,14 +242,19 @@ export function DataPrivacySettings() {
                                 </ul>
 
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">
+                                    <label
+                                        htmlFor="delete-confirmation"
+                                        className="text-sm font-medium"
+                                    >
                                         Type <span className="font-mono">DELETE MY ACCOUNT</span> to
                                         confirm:
                                     </label>
                                     <Input
+                                        id="delete-confirmation"
                                         value={deleteConfirmation}
                                         onChange={(e) => setDeleteConfirmation(e.target.value)}
                                         placeholder="DELETE MY ACCOUNT"
+                                        autoComplete="off"
                                         className="font-mono"
                                     />
                                 </div>

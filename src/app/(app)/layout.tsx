@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/Sidebar";
 import { requireAuth } from "@/lib/session";
 
@@ -19,7 +19,36 @@ export default async function AppLayout({
   return (
     <SidebarProvider>
       <AppSidebar session={session} />
-      <main className="w-full h-screen overflow-hidden">{children}</main>
+      <main className="w-full h-screen overflow-hidden">
+        {/*
+          Persistent mobile navigation trigger. On phones the sidebar collapses
+          into an off-canvas Sheet that defaults closed, so the in-sidebar
+          trigger is unreachable. This floating trigger lives outside the Sheet
+          (it only needs SidebarProvider context) and is hidden from md: up,
+          where the in-sidebar trigger takes over. The content wrapper reserves
+          a left gutter on mobile so page headers never sit under it.
+        */}
+        <SidebarTrigger
+          aria-label="Open navigation menu"
+          className="fixed left-2 top-2 z-50 size-9 border bg-background/80 shadow-sm backdrop-blur-sm md:hidden"
+        />
+        {/*
+          App content canvas. Consumes the Display Density preference
+          (--content-padding, set by PreferencesProvider) so Compact/Comfortable/
+          Spacious actually changes the shell inset instead of being a no-op.
+          On mobile the left padding clears the floating nav trigger.
+        */}
+        <div
+          className="h-full w-full overflow-hidden pl-14 md:pl-[var(--content-padding)]"
+          style={{
+            paddingTop: "var(--content-padding)",
+            paddingRight: "var(--content-padding)",
+            paddingBottom: "var(--content-padding)",
+          }}
+        >
+          {children}
+        </div>
+      </main>
     </SidebarProvider>
   );
 }

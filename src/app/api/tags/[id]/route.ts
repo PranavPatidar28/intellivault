@@ -9,6 +9,9 @@ import { Prisma } from "@/generated/prisma";
 const updateTagSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   color: z.string().max(50).optional(),
+  description: z.string().max(500).nullish(),
+  isFavorite: z.boolean().optional(),
+  isArchived: z.boolean().optional(),
 });
 
 // Prisma throws P2025 when an update/delete matches no row (e.g. wrong id or
@@ -54,6 +57,15 @@ export async function PATCH(
     if (validated.color !== undefined) {
       updateData.color = validated.color;
     }
+    if (validated.description !== undefined) {
+      updateData.description = validated.description;
+    }
+    if (validated.isFavorite !== undefined) {
+      updateData.isFavorite = validated.isFavorite;
+    }
+    if (validated.isArchived !== undefined) {
+      updateData.isArchived = validated.isArchived;
+    }
 
     const tag = await prisma.tag.update({
       where: {
@@ -75,6 +87,9 @@ export async function PATCH(
         name: tag.name,
         slug: tag.slug,
         color: tag.color,
+        description: tag.description,
+        isFavorite: tag.isFavorite,
+        isArchived: tag.isArchived,
         usageCount: tag._count.notes,
         lastUsed: tag.lastUsed,
         createdAt: tag.createdAt,
@@ -184,6 +199,9 @@ export async function GET(
         name: tag.name,
         slug: tag.slug,
         color: tag.color,
+        description: tag.description,
+        isFavorite: tag.isFavorite,
+        isArchived: tag.isArchived,
         usageCount: tag._count.notes,
         lastUsed: tag.lastUsed,
         createdAt: tag.createdAt,

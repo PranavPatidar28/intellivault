@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useMedia, type MediaItem } from "@/hooks/use-media"
 import { MediaCard } from "@/components/media/MediaCard"
 import { MediaPreviewModal } from "@/components/media/MediaPreviewModal"
@@ -27,7 +27,8 @@ import {
     X,
     Loader2,
     FolderOpen,
-    RefreshCw
+    RefreshCw,
+    Upload
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -41,6 +42,7 @@ export default function MediaPage() {
         setFileType,
         deleteMedia,
         deleteMultiple,
+        renameMedia,
         refresh,
         hasMore,
         loadMore,
@@ -54,6 +56,55 @@ export default function MediaPage() {
     const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
     const [isLoadingNotes, setIsLoadingNotes] = useState(false)
+    const [isUploading, setIsUploading] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+
+    const handleUploadFiles = async (files: FileList | null) => {
+        if (!files || files.length === 0) return
+
+        setIsUploading(true)
+        let succeeded = 0
+        let failed = 0
+
+        await Promise.all(
+            Array.from(files).map(async (file) => {
+                try {
+                    const formData = new FormData()
+                    formData.append("file", file)
+                    const res = await fetch("/api/upload", {
+                        method: "POST",
+                        body: formData,
+                    })
+                    const data = await res.json()
+                    if (res.ok && data.success) {
+                        succeeded++
+                    } else {
+                        failed++
+                    }
+                } catch {
+                    failed++
+                }
+            })
+        )
+
+        setIsUploading(false)
+        if (fileInputRef.current) fileInputRef.current.value = ""
+
+        if (succeeded > 0) {
+            toast({
+                title: "Upload complete",
+                description: `${succeeded} file(s) uploaded${failed > 0 ? `, ${failed} failed` : ""}.`,
+                variant: failed > 0 ? "destructive" : undefined,
+            })
+            await refresh()
+        } else {
+            toast({
+                title: "Upload failed",
+                description: "No files could be uploaded. Please try again.",
+                variant: "destructive",
+            })
+        }
+    }
 
     // Fetch affected notes when delete confirmation is requested
     const handleDeleteRequest = async (item: MediaItem) => {
@@ -130,14 +181,31 @@ export default function MediaPage() {
     }
 
     const handleBulkDelete = async () => {
+        const urls = Array.from(selectedUrls)
+        const total = urls.length
+
         setIsDeleting(true)
-        const count = await deleteMultiple(Array.from(selectedUrls))
+        const count = await deleteMultiple(urls)
         setIsDeleting(false)
 
-        toast({
-            title: "Files deleted",
-            description: `${count} file(s) have been deleted.`,
-        })
+        if (count === total) {
+            toast({
+                title: "Files deleted",
+                description: `${count} file(s) have been deleted.`,
+            })
+        } else if (count > 0) {
+            toast({
+                title: "Some files could not be deleted",
+                description: `${count} of ${total} file(s) were deleted; ${total - count} failed.`,
+                variant: "destructive",
+            })
+        } else {
+            toast({
+                title: "Delete failed",
+                description: `None of the ${total} selected file(s) could be deleted. Please try again.`,
+                variant: "destructive",
+            })
+        }
 
         setIsBulkDeleteOpen(false)
         setSelectedUrls(new Set())
@@ -145,15 +213,39 @@ export default function MediaPage() {
     }
 
     return (
-        <div className="container mx-auto py-6 px-4">
+        <div className="h-full overflow-y-auto">
+            <div className="container mx-auto py-6 px-4">
             {/* Header */}
             <div className="flex flex-col gap-4 mb-6">
                 <div className="flex items-center justify-between">
-                    <h1 className="text-2xl font-bold">Media Library</h1>
-                    <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading}>
-                        <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                        Refresh
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-2xl font-bold">Media Library</h1>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => handleUploadFiles(e.target.files)}
+                        />
+                        <Button
+                            size="sm"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading}
+                        >
+                            {isUploading ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                                <Upload className="h-4 w-4 mr-2" />
+                            )}
+                            Upload
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading}>
+                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                            Refresh
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Filters and actions */}
@@ -235,8 +327,22 @@ export default function MediaPage() {
                     <p className="text-sm">
                         {fileType
                             ? `No ${fileType.toLowerCase()} files found`
-                            : "Upload media in your notes to see them here"}
+                            : "Upload media here or add it from within your notes"}
                     </p>
+                    {!fileType && (
+                        <Button
+                            className="mt-4"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading}
+                        >
+                            {isUploading ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                                <Upload className="h-4 w-4 mr-2" />
+                            )}
+                            Upload media
+                        </Button>
+                    )}
                 </div>
             )}
 
@@ -280,9 +386,19 @@ export default function MediaPage() {
                 item={previewItem}
                 isOpen={!!previewItem}
                 onClose={() => setPreviewItem(null)}
+                onRename={(name) => {
+                    if (previewItem) {
+                        renameMedia(previewItem.id, name)
+                        setPreviewItem({ ...previewItem, filename: name })
+                    }
+                }}
                 onDelete={() => {
                     if (previewItem) {
-                        handleDeleteRequest(previewItem)
+                        const item = previewItem
+                        // Close the preview before opening the confirm dialog so we
+                        // never stack two Radix dialogs (competing focus traps).
+                        setPreviewItem(null)
+                        handleDeleteRequest(item)
                     }
                 }}
             />
@@ -373,6 +489,7 @@ export default function MediaPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            </div>
         </div>
     )
 }

@@ -12,8 +12,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Search, Grid3x3, List, Trash2, Palette, GitMerge } from "lucide-react";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
+import { Search, Grid3x3, List, Trash2, Palette, GitMerge, TagsIcon } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { TAG_COLOR_PALETTE, getTextColorForBackground } from "@/lib/utils/tagColors";
 
 interface Tag {
     id: string;
@@ -58,6 +64,7 @@ export function TagList({
     const [searchQuery, setSearchQuery] = useState("");
     const [sortBy, setSortBy] = useState("usageCount");
     const [sortOrder, setSortOrder] = useState("desc");
+    const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
     const parentRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -159,6 +166,8 @@ export function TagList({
                             variant={viewMode === "list" ? "default" : "outline"}
                             size="icon"
                             onClick={() => onViewModeChange("list")}
+                            aria-label="List view"
+                            aria-pressed={viewMode === "list"}
                         >
                             <List size={16} />
                         </Button>
@@ -166,6 +175,8 @@ export function TagList({
                             variant={viewMode === "grid" ? "default" : "outline"}
                             size="icon"
                             onClick={() => onViewModeChange("grid")}
+                            aria-label="Grid view"
+                            aria-pressed={viewMode === "grid"}
                         >
                             <Grid3x3 size={16} />
                         </Button>
@@ -187,10 +198,35 @@ export function TagList({
                             <GitMerge size={14} className="mr-1" />
                             Merge
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => onBulkRecolor("#3b82f6")}>
-                            <Palette size={14} className="mr-1" />
-                            Color
-                        </Button>
+                        <Popover open={isColorPopoverOpen} onOpenChange={setIsColorPopoverOpen}>
+                            <PopoverTrigger asChild>
+                                <Button size="sm" variant="outline">
+                                    <Palette size={14} className="mr-1" />
+                                    Color
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-56 p-3" align="start">
+                                <p className="text-sm font-medium mb-2">
+                                    Recolor {selectedTagIds.length} tag{selectedTagIds.length !== 1 ? "s" : ""}
+                                </p>
+                                <div className="grid grid-cols-5 gap-2">
+                                    {TAG_COLOR_PALETTE.map((color) => (
+                                        <button
+                                            key={color.value}
+                                            type="button"
+                                            onClick={() => {
+                                                onBulkRecolor(color.value);
+                                                setIsColorPopoverOpen(false);
+                                            }}
+                                            className="w-8 h-8 rounded-md border-2 border-transparent hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+                                            style={{ backgroundColor: color.value }}
+                                            title={color.name}
+                                            aria-label={`Recolor selected tags ${color.name}`}
+                                        />
+                                    ))}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
                         <Button size="sm" variant="destructive" onClick={onBulkDelete}>
                             <Trash2 size={14} className="mr-1" />
                             Delete
@@ -204,13 +240,34 @@ export function TagList({
                 ref={parentRef}
                 className="flex-1 overflow-y-auto p-4"
             >
-                <div
-                    style={{
-                        height: `${rowVirtualizer.getTotalSize()}px`,
-                        width: '100%',
-                        position: 'relative',
-                    }}
-                >
+                {tags.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center px-6 py-12 text-muted-foreground">
+                        <TagsIcon className="h-10 w-10 mb-3 opacity-50" />
+                        {searchQuery.trim() ? (
+                            <>
+                                <p className="text-sm font-medium text-foreground">No tags found</p>
+                                <p className="text-sm mt-1">
+                                    No tags match &ldquo;{searchQuery.trim()}&rdquo;. Try a different search.
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm font-medium text-foreground">No tags yet</p>
+                                <p className="text-sm mt-1">
+                                    Tags are created when you add them to notes. Open a note and start
+                                    tagging to see them here.
+                                </p>
+                            </>
+                        )}
+                    </div>
+                ) : (
+                    <div
+                        style={{
+                            height: `${rowVirtualizer.getTotalSize()}px`,
+                            width: '100%',
+                            position: 'relative',
+                        }}
+                    >
                     {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                         // For grid view, we render 2 items per row
                         if (viewMode === "grid") {
@@ -251,7 +308,7 @@ export function TagList({
                                                 className="w-fit"
                                                 style={{
                                                     backgroundColor: tag.color || undefined,
-                                                    color: tag.color ? "#fff" : undefined,
+                                                    color: tag.color ? getTextColorForBackground(tag.color) : undefined,
                                                 }}
                                             >
                                                 {tag.name}
@@ -296,7 +353,7 @@ export function TagList({
                                         variant="secondary"
                                         style={{
                                             backgroundColor: tag.color || undefined,
-                                            color: tag.color ? "#fff" : undefined,
+                                            color: tag.color ? getTextColorForBackground(tag.color) : undefined,
                                         }}
                                     >
                                         {tag.name}
@@ -308,7 +365,8 @@ export function TagList({
                             </div>
                         );
                     })}
-                </div>
+                    </div>
+                )}
             </div>
         </div>
     );

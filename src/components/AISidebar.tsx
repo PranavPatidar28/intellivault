@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     Sparkles,
     RefreshCw,
@@ -13,6 +13,7 @@ import {
     PanelRightClose,
     Copy,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -25,6 +26,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { useSummarize, useAutoTag, type TagSuggestion, type SummarizeOptions } from "@/hooks/use-ai-features";
 import { useRelatedNotes } from "@/hooks/use-related-notes";
@@ -65,9 +68,13 @@ function SummaryContent({ content, isStreaming }: SummaryContentProps) {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = async () => {
-        await navigator.clipboard.writeText(content);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        try {
+            await navigator.clipboard.writeText(content);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            toast.error("Couldn't copy to clipboard");
+        }
     };
 
     return (
@@ -82,7 +89,8 @@ function SummaryContent({ content, isStreaming }: SummaryContentProps) {
             </div>
             <button
                 onClick={handleCopy}
-                className="absolute top-2 right-2 p-1.5 rounded bg-muted/80 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted"
+                className="absolute top-2 right-2 p-1.5 rounded bg-muted/80 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Copy summary"
                 title="Copy summary"
             >
                 {copied ? (
@@ -125,38 +133,9 @@ export function AISidebar({
     const { summarizeStream, generateTitle, isLoading: isSummarizing } = useSummarize();
     const { suggestTags, isLoading: isSuggestingTags } = useAutoTag();
     const { findRelated, relatedNotes, isLoading: isFindingRelated } = useRelatedNotes();
+    const isMobile = useIsMobile();
 
-    // Keyboard Shortcuts
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (!isOpen) return;
-
-            // Ctrl+Shift+S -> Summarize
-            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
-                e.preventDefault();
-                handleGenerateSummary();
-            }
-            // Ctrl+Shift+T -> Suggest Tags
-            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "T") {
-                e.preventDefault();
-                handleSuggestTags();
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isOpen]);
-
-    // Auto-find related notes when sidebar opens
-    useEffect(() => {
-        if (isOpen && noteId) {
-            // We need content to search. For now, let's just trigger it if user clicks.
-            // Or we could pass content in props if we want auto-search.
-            // Let's stick to manual trigger for now to avoid prop drilling large content.
-        }
-    }, [isOpen, noteId]);
-
-    const handleGenerateSummary = async () => {
+    const handleGenerateSummary = useCallback(async () => {
         // Clear previous summary to show streaming fresh
         setSummary("");
         setReasoning("");
@@ -187,9 +166,9 @@ export function AISidebar({
                 setGeneratedTitle(title);
             }
         }
-    };
+    }, [noteId, summaryLength, summaryStyle, includeImages, summarizeStream, generateTitle]);
 
-    const handleSuggestTags = async () => {
+    const handleSuggestTags = useCallback(async () => {
         const result = await suggestTags(noteId);
         if (result) {
             const currentTagNames = new Set(currentTags.map((t) => t.name.toLowerCase()));
@@ -198,7 +177,37 @@ export function AISidebar({
             );
             setSuggestions(newSuggestions);
         }
-    };
+    }, [noteId, suggestTags, currentTags]);
+
+    // Keyboard Shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (!isOpen) return;
+
+            // Ctrl+Shift+S -> Summarize
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
+                e.preventDefault();
+                handleGenerateSummary();
+            }
+            // Ctrl+Shift+T -> Suggest Tags
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "T") {
+                e.preventDefault();
+                handleSuggestTags();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, handleGenerateSummary, handleSuggestTags]);
+
+    // Auto-find related notes when sidebar opens
+    useEffect(() => {
+        if (isOpen && noteId) {
+            // We need content to search. For now, let's just trigger it if user clicks.
+            // Or we could pass content in props if we want auto-search.
+            // Let's stick to manual trigger for now to avoid prop drilling large content.
+        }
+    }, [isOpen, noteId]);
 
     const handleApplyTag = (tagName: string) => {
         onApplyTags([tagName]);
@@ -223,47 +232,10 @@ export function AISidebar({
 
     const isLoading = isSummarizing || isSuggestingTags;
 
-    // Render Sidebar
-    return (
-        <div
-            className={cn(
-                "border-l bg-muted/20 flex flex-col h-full shrink-0 transition-all duration-300 ease-in-out",
-                isOpen ? "w-[320px]" : "w-[50px]",
-                className
-            )}
-        >
-            {/* Header / Toggle Area */}
-            <div className={cn(
-                "flex items-center p-2 border-b bg-background/50 h-[45px]", // Fixed height to match likely tag bar height
-                isOpen ? "justify-between px-3" : "justify-center"
-            )}>
-                {isOpen && (
-                    <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
-                        <Sparkles size={16} className="text-primary" />
-                        <h2 className="font-semibold text-sm">AI Assistant</h2>
-                    </div>
-                )}
-
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={onToggle}
-                    className="h-8 w-8 shrink-0"
-                    title={isOpen ? "Close AI Sidebar" : "Open AI Assistant"}
-                >
-                    {isOpen ? (
-                        <PanelRightClose size={18} className="text-muted-foreground" />
-                    ) : (
-                        <Sparkles size={18} className="text-primary" />
-                    )}
-                </Button>
-            </div>
-
-            {/* Content */}
-            <div className={cn(
-                "flex-1 overflow-y-auto p-4 space-y-5",
-                !isOpen && "hidden"
-            )}>
+    // The scrollable AI tool sections, shared between the desktop inline column
+    // and the mobile Sheet overlay so we don't duplicate the markup.
+    const sections = (
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
                 {/* Summary Section */}
                 <section className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -496,14 +468,16 @@ export function AISidebar({
                                         <div className="flex items-center gap-0.5">
                                             <button
                                                 onClick={() => handleApplyTag(suggestion.name)}
-                                                className="p-1 hover:bg-green-500/20 rounded transition-colors"
+                                                className="p-1 hover:bg-green-500/20 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                aria-label={`Apply tag ${suggestion.name}`}
                                                 title="Apply"
                                             >
                                                 <Check size={12} className="text-green-600" />
                                             </button>
                                             <button
                                                 onClick={() => handleDismissTag(suggestion.name)}
-                                                className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                                                className="p-1 hover:bg-red-500/20 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                aria-label={`Dismiss tag ${suggestion.name}`}
                                                 title="Dismiss"
                                             >
                                                 <X size={12} className="text-muted-foreground" />
@@ -521,16 +495,91 @@ export function AISidebar({
                         </div>
                     )}
                 </section>
+        </div>
+    );
+
+    // On mobile/tablet (< md) the sidebar would crush the editor to a few
+    // pixels, so render it as a full-bleed Sheet overlay instead of an inline
+    // column. The toggle button lives in the collapsed rail that stays in the
+    // editor flex row.
+    if (isMobile) {
+        return (
+            <>
+                <div
+                    className={cn(
+                        "border-l bg-muted/20 flex flex-col items-center h-full shrink-0 w-[50px]",
+                        className
+                    )}
+                >
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={onToggle}
+                        className="h-8 w-8 mt-2"
+                        aria-label="Open AI Assistant"
+                        title="Open AI Assistant"
+                    >
+                        <Sparkles size={18} className="text-primary" />
+                    </Button>
+                </div>
+
+                <Sheet open={isOpen} onOpenChange={(open) => { if (open !== isOpen) onToggle(); }}>
+                    <SheetContent side="right" className="w-full sm:max-w-sm p-0 gap-0">
+                        <SheetHeader className="border-b bg-background/50 p-3">
+                            <SheetTitle className="flex items-center gap-2 text-sm">
+                                <Sparkles size={16} className="text-primary" />
+                                AI Assistant
+                            </SheetTitle>
+                            <SheetDescription className="sr-only">
+                                Generate summaries, suggest titles and tags, and find related notes for this note.
+                            </SheetDescription>
+                        </SheetHeader>
+                        {sections}
+                    </SheetContent>
+                </Sheet>
+            </>
+        );
+    }
+
+    // Desktop: inline collapsible column beside the editor.
+    return (
+        <div
+            className={cn(
+                "border-l bg-muted/20 flex flex-col h-full shrink-0 transition-all duration-300 ease-in-out",
+                isOpen ? "w-[320px]" : "w-[50px]",
+                className
+            )}
+        >
+            {/* Header / Toggle Area */}
+            <div className={cn(
+                "flex items-center p-2 border-b bg-background/50 h-[45px]", // Fixed height to match likely tag bar height
+                isOpen ? "justify-between px-3" : "justify-center"
+            )}>
+                {isOpen && (
+                    <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
+                        <Sparkles size={16} className="text-primary" />
+                        <h2 className="font-semibold text-sm">AI Assistant</h2>
+                    </div>
+                )}
+
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onToggle}
+                    className="h-8 w-8 shrink-0"
+                    aria-label={isOpen ? "Close AI Sidebar" : "Open AI Assistant"}
+                    title={isOpen ? "Close AI Sidebar" : "Open AI Assistant"}
+                >
+                    {isOpen ? (
+                        <PanelRightClose size={18} className="text-muted-foreground" />
+                    ) : (
+                        <Sparkles size={18} className="text-primary" />
+                    )}
+                </Button>
             </div>
 
-            {/* Footer */}
-            {/* {isOpen && (
-                <div className="p-3 border-t bg-background/50">
-                    <p className="text-[9px] text-muted-foreground text-center">
-                        Powered by AI • Results may vary
-                    </p>
-                </div>
-            )} */}
+            {/* Content */}
+            {isOpen && sections}
         </div>
     );
 }

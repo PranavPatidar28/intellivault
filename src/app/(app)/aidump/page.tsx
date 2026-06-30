@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, useId } from "react";
 import { useRouter } from "next/navigation";
 import {
     Wand2,
@@ -28,11 +28,13 @@ import {
     BookOpen,
     Lightbulb,
     GraduationCap,
-    Mail,
     Zap,
     PenLine,
     Edit,
     AlertTriangle,
+    Settings2,
+    PanelRight,
+    Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -49,9 +51,25 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import {
+    Sheet,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAIDump } from "@/hooks/use-ai-dump";
-import type { DraftSummary } from "@/hooks/use-ai-dump";
+import type { DraftSummary, AIDumpData } from "@/hooks/use-ai-dump";
 import { useFileUpload, SUPPORTED_FILE_TYPES } from "@/hooks/use-file-upload";
+import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getRelativeTime } from "@/lib/utils/text";
@@ -124,6 +142,28 @@ function useResizablePanel(initialWidth: number, minWidth: number, maxWidth: num
 }
 
 // ============================================================================
+// Media query + platform helpers
+// ============================================================================
+
+/** Detects the Apple platform so we can show the right modifier glyph. */
+function useIsApplePlatform(): boolean {
+    const [isApple, setIsApple] = useState(false);
+    useEffect(() => {
+        const detect = () => {
+            const platform =
+                // userAgentData is the modern source; fall back to navigator.platform.
+                (navigator as Navigator & { userAgentData?: { platform?: string } })
+                    .userAgentData?.platform ||
+                navigator.platform ||
+                "";
+            setIsApple(/mac|iphone|ipad|ipod/i.test(platform));
+        };
+        detect();
+    }, []);
+    return isApple;
+}
+
+// ============================================================================
 // Page Component
 // ============================================================================
 
@@ -139,6 +179,26 @@ export default function AIDumpPage() {
     const [isRefining, setIsRefining] = useState(false);
     const [refinementInput, setRefinementInput] = useState("");
 
+    // Mobile panel sheets (options + metadata are off-canvas below lg).
+    const [optionsSheetOpen, setOptionsSheetOpen] = useState(false);
+    const [metadataSheetOpen, setMetadataSheetOpen] = useState(false);
+
+    // The Sheets are lg:hidden, but Radix keeps the overlay mounted while open.
+    // If the viewport grows to lg while a Sheet is open, the content hides but a
+    // dark backdrop can linger — so close both Sheets when crossing to lg.
+    const isLgUp = useIsBreakpoint("min", 1024);
+    useEffect(() => {
+        if (isLgUp) {
+            setOptionsSheetOpen(false);
+            setMetadataSheetOpen(false);
+        }
+    }, [isLgUp]);
+
+    // Confirm before permanently deleting a saved draft.
+    const [draftPendingDelete, setDraftPendingDelete] = useState<DraftSummary | null>(null);
+
+    const isApple = useIsApplePlatform();
+
     // Inline editor
     const [isEditMode, setIsEditMode] = useState(false);
     const [editedMarkdown, setEditedMarkdown] = useState("");
@@ -148,10 +208,18 @@ export default function AIDumpPage() {
     const [draftsLoading, setDraftsLoading] = useState(false);
     const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
 
-    const detectedContentType = useMemo<ContentTypeResult | null>(() => {
-        if (inputContent.length < 50) return null;
-        return detectContentType(inputContent);
+    // Debounce the raw input before running the (expensive) content-type
+    // detection, so a large paste / upload doesn't re-scan on every keystroke.
+    const [debouncedContent, setDebouncedContent] = useState("");
+    useEffect(() => {
+        const id = setTimeout(() => setDebouncedContent(inputContent), 350);
+        return () => clearTimeout(id);
     }, [inputContent]);
+
+    const detectedContentType = useMemo<ContentTypeResult | null>(() => {
+        if (debouncedContent.length < 50) return null;
+        return detectContentType(debouncedContent);
+    }, [debouncedContent]);
 
     // Collapsible state for right sidebar sections
     const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -169,6 +237,7 @@ export default function AIDumpPage() {
     const {
         aiDump,
         isProcessing,
+        isGenerating,
         isRegenerating,
         error,
         streamingStatus,
@@ -181,6 +250,7 @@ export default function AIDumpPage() {
         loadDraft,
         deleteDraft,
         listDrafts,
+        cancel,
         setSelectedTitle,
         toggleTag,
         reset,
@@ -263,6 +333,37 @@ export default function AIDumpPage() {
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [inputContent, uploadedImage, isProcessing, isUploading, aiDump, handleSubmit]);
 
+    // True when the user has inline edits that diverge from the generated
+    // markdown and hasn't saved them yet. Used to guard navigation.
+    const hasUnsavedEdits =
+        !!aiDump &&
+        aiDump.status !== "final" &&
+        editedMarkdown.length > 0 &&
+        editedMarkdown !== aiDump.markdown;
+
+    // Warn on hard navigation / tab close while edits are unsaved.
+    useEffect(() => {
+        if (!hasUnsavedEdits) return;
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = "";
+        };
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }, [hasUnsavedEdits]);
+
+    // Confirm before in-app navigation away (e.g. the back link) loses edits.
+    const handleBackNavigation = useCallback(
+        (e: React.MouseEvent) => {
+            if (!hasUnsavedEdits) return;
+            const ok = window.confirm(
+                "You have unsaved edits to this note. Leave without saving?"
+            );
+            if (!ok) e.preventDefault();
+        },
+        [hasUnsavedEdits]
+    );
+
     const handleOptionsChange = useCallback(
         (newOptions: Partial<AIDumpOptions>) => {
             setOptions((prev) => ({
@@ -294,6 +395,9 @@ export default function AIDumpPage() {
         setUploadedImage(null);
         setIsEditMode(false);
         setEditedMarkdown("");
+        setRefinementInput("");
+        setPreviewTab("generated");
+        setCopiedSection(null);
         clearFile();
         reset();
     }, [reset, clearFile]);
@@ -313,20 +417,25 @@ export default function AIDumpPage() {
         [loadDraft, toast, refreshDrafts]
     );
 
-    const handleDeleteDraft = useCallback(
-        async (noteId: string) => {
-            setDeletingDraftId(noteId);
-            try {
-                const ok = await deleteDraft(noteId);
-                if (ok) {
-                    setDrafts((prev) => prev.filter((d) => d.id !== noteId));
-                }
-            } finally {
-                setDeletingDraftId(null);
+    // Open the confirmation dialog; actual delete happens on confirm.
+    const requestDeleteDraft = useCallback((draft: DraftSummary) => {
+        setDraftPendingDelete(draft);
+    }, []);
+
+    const confirmDeleteDraft = useCallback(async () => {
+        const draft = draftPendingDelete;
+        if (!draft) return;
+        setDeletingDraftId(draft.id);
+        try {
+            const ok = await deleteDraft(draft.id);
+            if (ok) {
+                setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
             }
-        },
-        [deleteDraft]
-    );
+        } finally {
+            setDeletingDraftId(null);
+            setDraftPendingDelete(null);
+        }
+    }, [deleteDraft, draftPendingDelete]);
 
     // Apply a refinement instruction to the current markdown output.
     const handleRefine = useCallback(
@@ -356,10 +465,22 @@ export default function AIDumpPage() {
 
     const copyToClipboard = useCallback(
         async (text: string, section: string) => {
-            await navigator.clipboard.writeText(text);
-            setCopiedSection(section);
-            toast({ title: "Copied to clipboard" });
-            setTimeout(() => setCopiedSection(null), 2000);
+            try {
+                if (!navigator.clipboard?.writeText) {
+                    throw new Error("Clipboard API unavailable");
+                }
+                await navigator.clipboard.writeText(text);
+                setCopiedSection(section);
+                toast({ title: "Copied to clipboard" });
+                setTimeout(() => setCopiedSection(null), 2000);
+            } catch {
+                toast({
+                    title: "Couldn't copy to clipboard",
+                    description:
+                        "Your browser blocked clipboard access. Try copying manually.",
+                    variant: "destructive",
+                });
+            }
         },
         [toast]
     );
@@ -377,35 +498,68 @@ export default function AIDumpPage() {
     return (
         <div className="flex flex-col h-full bg-background">
             {/* Header */}
-            <header className="flex items-center justify-between px-6 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
-                <div className="flex items-center gap-4">
-                    <Link href="/dashboard">
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+            <header className="flex items-center justify-between px-4 md:px-6 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
+                <div className="flex items-center gap-2 md:gap-4 min-w-0">
+                    {/* Mobile nav trigger — this page has a custom layout, so the
+                        shared sidebar is otherwise unreachable on small screens. */}
+                    <SidebarTrigger className="md:hidden" />
+                    <Link href="/dashboard" onClick={handleBackNavigation}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to dashboard">
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
                     </Link>
-                    <div>
-                        <h1 className="text-lg font-semibold flex items-center gap-2">
-                            <Wand2 className="h-4 w-4 text-primary" />
+                    <div className="min-w-0">
+                        <h1 className="text-lg font-semibold flex items-center gap-2 truncate">
+                            <Wand2 className="h-4 w-4 text-primary flex-shrink-0" />
                             AI Dump
                         </h1>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 md:gap-2">
                     {/* Streaming Status Badge */}
                     {streamingStatus && (
-                        <Badge variant="secondary" className="gap-1.5 animate-pulse" role="status" aria-live="polite">
+                        <Badge variant="secondary" className="gap-1.5 animate-pulse hidden sm:flex" role="status" aria-live="polite">
                             <Loader2 className="h-3 w-3 animate-spin" />
                             {streamingStatus}
                         </Badge>
+                    )}
+
+                    {/* Stop / cancel an in-flight generation */}
+                    {isGenerating && (
+                        <Button variant="outline" size="sm" onClick={cancel} className="gap-1.5 text-xs">
+                            <Square className="h-3 w-3 fill-current" />
+                            Stop
+                        </Button>
+                    )}
+
+                    {/* Mobile-only panel toggles (the asides become Sheets below lg) */}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 lg:hidden"
+                        aria-label="Open options"
+                        onClick={() => setOptionsSheetOpen(true)}
+                    >
+                        <Settings2 className="h-4 w-4" />
+                    </Button>
+                    {(aiDump || isProcessing) && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 lg:hidden"
+                            aria-label="Open title, tags and summary"
+                            onClick={() => setMetadataSheetOpen(true)}
+                        >
+                            <PanelRight className="h-4 w-4" />
+                        </Button>
                     )}
 
                     {aiDump && (
                         <>
                             <Button variant="ghost" size="sm" onClick={handleReset} className="gap-1.5 text-xs">
                                 <RotateCcw className="h-3 w-3" />
-                                Reset
+                                <span className="hidden sm:inline">Reset</span>
                             </Button>
                             <Button size="sm" onClick={handleSave} disabled={isProcessing || !selectedTitle.trim()} className="gap-1.5">
                                 Save Note
@@ -415,205 +569,23 @@ export default function AIDumpPage() {
                 </div>
             </header>
 
-            {/* Main Content - 3 Column Layout: Options | Preview | Metadata */}
-            <div className="flex-1 flex min-h-0">
-                {/* Left Panel - Options */}
-                <aside className="w-[240px] flex-shrink-0 border-r overflow-auto bg-muted/20">
-                    <div className="p-4 space-y-5">
-                        <div>
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                                Template
-                            </h3>
-                            <Select
-                                value={options.template}
-                                onValueChange={(v) => handleOptionsChange({ template: v as AIDumpOptions["template"] })}
-                                disabled={isProcessing}
-                            >
-                                <SelectTrigger className="w-full h-9">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="auto">
-                                        <span className="flex items-center gap-2">
-                                            <Sparkles className="h-3.5 w-3.5 text-primary" />
-                                            Auto-detect
-                                        </span>
-                                    </SelectItem>
-                                    <SelectItem value="meeting">
-                                        <span className="flex items-center gap-2">
-                                            <Users className="h-3.5 w-3.5 text-blue-500" />
-                                            Meeting Notes
-                                        </span>
-                                    </SelectItem>
-                                    <SelectItem value="research">
-                                        <span className="flex items-center gap-2">
-                                            <BookOpen className="h-3.5 w-3.5 text-green-500" />
-                                            Research Notes
-                                        </span>
-                                    </SelectItem>
-                                    <SelectItem value="code-review">
-                                        <span className="flex items-center gap-2">
-                                            <FileCode className="h-3.5 w-3.5 text-orange-500" />
-                                            Code Review
-                                        </span>
-                                    </SelectItem>
-                                    <SelectItem value="code">
-                                        <span className="flex items-center gap-2">
-                                            <FileCode className="h-3.5 w-3.5 text-rose-500" />
-                                            Technical Docs
-                                        </span>
-                                    </SelectItem>
-                                    <SelectItem value="brainstorm">
-                                        <span className="flex items-center gap-2">
-                                            <Lightbulb className="h-3.5 w-3.5 text-yellow-500" />
-                                            Brainstorm
-                                        </span>
-                                    </SelectItem>
-                                    <SelectItem value="lecture">
-                                        <span className="flex items-center gap-2">
-                                            <GraduationCap className="h-3.5 w-3.5 text-purple-500" />
-                                            Lecture Notes
-                                        </span>
-                                    </SelectItem>
-                                    <SelectItem value="article">
-                                        <span className="flex items-center gap-2">
-                                            <FileText className="h-3.5 w-3.5 text-cyan-500" />
-                                            Article Summary
-                                        </span>
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            {/* Template description */}
-                            <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
-                                {options.template === "auto" && "AI will analyze content and choose the best format."}
-                                {options.template === "meeting" && "Extracts attendees, decisions, and action items."}
-                                {options.template === "research" && "Organizes findings with sources and methodology."}
-                                {options.template === "code-review" && "Documents issues, suggestions, and good patterns."}
-                                {options.template === "brainstorm" && "Groups ideas by theme and highlights top concepts."}
-                                {options.template === "lecture" && "Formats with objectives, concepts, and summary."}
-                                {options.template === "article" && "Summarizes with key points and takeaways."}
-                                {options.template === "code" && "Documents code with explanations and examples."}
-                            </p>
-                            {/* Detected content type badge */}
-                            {detectedContentType && detectedContentType.confidence > 0.4 && (
-                                <div className="mt-3 flex items-center gap-2">
-                                    <Badge
-                                        variant="secondary"
-                                        className={cn("text-[10px] gap-1", getContentTypeDisplay(detectedContentType.type).color)}
-                                    >
-                                        <Zap className="h-2.5 w-2.5" />
-                                        Detected: {getContentTypeDisplay(detectedContentType.type).label}
-                                    </Badge>
-                                    {detectedContentType.suggestedTemplate !== options.template &&
-                                        detectedContentType.suggestedTemplate !== "auto" && (
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-5 text-[10px] px-2"
-                                                onClick={() => handleOptionsChange({ template: detectedContentType.suggestedTemplate as AIDumpOptions["template"] })}
-                                            >
-                                                Use
-                                            </Button>
-                                        )}
-                                </div>
-                            )}
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                                Generate
-                            </h3>
-                            <div className="space-y-2.5">
-                                <ToggleOption
-                                    label="Title Variants"
-                                    icon={<Type className="h-3.5 w-3.5" />}
-                                    checked={options.toggles.titles}
-                                    onChange={() => handleOptionsChange({ toggles: { ...options.toggles, titles: !options.toggles.titles } })}
-                                    disabled={isProcessing}
-                                />
-                                <ToggleOption
-                                    label="Smart Tags"
-                                    icon={<Hash className="h-3.5 w-3.5" />}
-                                    checked={options.toggles.tags}
-                                    onChange={() => handleOptionsChange({ toggles: { ...options.toggles, tags: !options.toggles.tags } })}
-                                    disabled={isProcessing}
-                                />
-                                <ToggleOption
-                                    label="Structured Markdown"
-                                    icon={<FileCode className="h-3.5 w-3.5" />}
-                                    checked={options.toggles.markdown}
-                                    onChange={() => handleOptionsChange({ toggles: { ...options.toggles, markdown: !options.toggles.markdown } })}
-                                    disabled={isProcessing}
-                                />
-                                <ToggleOption
-                                    label="Action Items"
-                                    icon={<ListTodo className="h-3.5 w-3.5" />}
-                                    checked={options.toggles.actions}
-                                    onChange={() => handleOptionsChange({ toggles: { ...options.toggles, actions: !options.toggles.actions } })}
-                                    disabled={isProcessing}
-                                />
-                            </div>
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                                Tone
-                            </h3>
-                            <Select
-                                value={options.tone}
-                                onValueChange={(v) => handleOptionsChange({ tone: v as AIDumpOptions["tone"] })}
-                                disabled={isProcessing}
-                            >
-                                <SelectTrigger className="w-full h-9">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="balanced">Balanced</SelectItem>
-                                    <SelectItem value="formal">Formal</SelectItem>
-                                    <SelectItem value="casual">Casual</SelectItem>
-                                    <SelectItem value="technical">Technical</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                    Creativity
-                                </h3>
-                                <span className="text-xs text-muted-foreground font-mono">
-                                    {options.temperature.toFixed(1)}
-                                </span>
-                            </div>
-                            <input
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.1"
-                                value={options.temperature}
-                                onChange={(e) => handleOptionsChange({ temperature: parseFloat(e.target.value) })}
-                                disabled={isProcessing}
-                                className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
-                            />
-                            <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                                <span>Precise</span>
-                                <span>Creative</span>
-                            </div>
-                        </div>
-                    </div>
+            {/* Main Content - 3 Column Layout (lg+); stacks to a single column below lg. */}
+            <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+                {/* Left Panel - Options (desktop inline; mobile lives in a Sheet) */}
+                <aside className="hidden lg:block w-[240px] flex-shrink-0 border-r overflow-auto bg-muted/20">
+                    <OptionsPanel
+                        options={options}
+                        handleOptionsChange={handleOptionsChange}
+                        isProcessing={isProcessing}
+                        detectedContentType={detectedContentType}
+                    />
                 </aside>
                 {/* Center Panel - Preview (Primary Focus) */}
                 <main className="flex-1 overflow-auto flex flex-col bg-background min-w-0 border-r">
                     {/* Reasoning ("Thinking…") — self-hides when there is none */}
                     {aiDump?.reasoning && (
                         <div className="px-4 pt-3">
-                            <ThinkingPanel reasoning={aiDump.reasoning} isStreaming={isProcessing} />
+                            <ThinkingPanel reasoning={aiDump.reasoning} isStreaming={isGenerating} />
                         </div>
                     )}
                     {/* Non-fatal warning (e.g. content truncated) */}
@@ -696,6 +668,7 @@ export default function AIDumpPage() {
                                                 )}
                                                 {processedFile.metadata.filename}
                                                 <button
+                                                    aria-label="Remove file"
                                                     onClick={() => {
                                                         clearFile();
                                                         setInputContent("");
@@ -755,7 +728,7 @@ export default function AIDumpPage() {
                                         <Wand2 className="h-4 w-4" />
                                         Run AI Dump
                                         <kbd className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary-foreground/20 rounded font-mono">
-                                            ⌘↵
+                                            {isApple ? "⌘↵" : "Ctrl ↵"}
                                         </kbd>
                                     </Button>
                                 </div>
@@ -809,7 +782,7 @@ export default function AIDumpPage() {
                                                         className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive"
                                                         aria-label={`Delete draft ${draft.title || "Untitled draft"}`}
                                                         disabled={deletingDraftId === draft.id}
-                                                        onClick={() => handleDeleteDraft(draft.id)}
+                                                        onClick={() => requestDeleteDraft(draft)}
                                                     >
                                                         {deletingDraftId === draft.id ? (
                                                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -944,7 +917,7 @@ export default function AIDumpPage() {
                                                 /* VIEW MODE: Show rendered markdown */
                                                 <MarkdownRenderer
                                                     content={editedMarkdown || aiDump?.markdown || ""}
-                                                    isStreaming={isProcessing}
+                                                    isStreaming={isGenerating}
                                                     enableCopyCode
                                                 />
                                             )}
@@ -1077,9 +1050,12 @@ export default function AIDumpPage() {
                     )}
                 </main>
 
-                {/* Resize Handle */}
+                {/* Resize Handle — pointer-driven, so desktop (lg+) only */}
                 <div
-                    className="w-1 bg-border hover:bg-primary/50 cursor-col-resize flex-shrink-0 relative group"
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Resize metadata panel"
+                    className="hidden lg:block w-1 bg-border hover:bg-primary/50 cursor-col-resize flex-shrink-0 relative group"
                     onMouseDown={handleRightPanelResize}
                 >
                     <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-4 h-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1087,263 +1063,125 @@ export default function AIDumpPage() {
                     </div>
                 </div>
 
-                {/* Right Panel - Metadata & Actions */}
-                <aside className="flex-shrink-0 overflow-auto bg-muted/10" style={{ width: rightPanelWidth }}>
-                    {(aiDump || isProcessing) ? (
-                        <div className="p-4 space-y-4">
-                            {/* TL;DR Section */}
-                            <div className="space-y-2">
-                                <button
-                                    onClick={() => toggleSectionCollapse("tldr")}
-                                    className="flex items-center justify-between w-full text-left"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <Sparkles className="h-3.5 w-3.5 text-primary" />
-                                        <span className="text-xs font-semibold uppercase tracking-wider text-primary">TL;DR</span>
-                                    </div>
-                                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", collapsedSections.tldr && "-rotate-90")} />
-                                </button>
-                                {!collapsedSections.tldr && (
-                                    <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
-                                        <CardContent className="p-3">
-                                            {hasTldr ? (
-                                                <p className="text-xs text-muted-foreground leading-relaxed">
-                                                    {aiDump!.tldr}
-                                                </p>
-                                            ) : (
-                                                <Skeleton className="h-4 w-full" />
-                                            )}
-                                        </CardContent>
-                                    </Card>
-                                )}
-                            </div>
-
-                            <Separator />
-
-                            {/* Choose Title Section */}
-                            <ResultSection
-                                title="Choose Title"
-                                icon={<Type className="h-4 w-4" />}
-                                onRegenerate={() => regenerateSection("titles")}
-                                isRegenerating={isRegenerating.titles}
-                                isLoading={!hasTitles && isProcessing}
-                            >
-                                {hasTitles ? (
-                                    <div className="space-y-2">
-                                        {aiDump!.titles.map((title, idx) => (
-                                            <button
-                                                key={idx}
-                                                onClick={() => setSelectedTitle(title.text)}
-                                                disabled={isProcessing}
-                                                className={cn(
-                                                    "w-full flex items-center gap-2 p-2 rounded-lg border text-left transition-all text-xs disabled:opacity-60 disabled:cursor-not-allowed",
-                                                    selectedTitle === title.text
-                                                        ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                                                        : "border-muted hover:border-primary/30 hover:bg-muted/50"
-                                                )}
-                                            >
-                                                <div
-                                                    className={cn(
-                                                        "w-3 h-3 rounded-full border-2 flex items-center justify-center flex-shrink-0",
-                                                        selectedTitle === title.text
-                                                            ? "border-primary bg-primary"
-                                                            : "border-muted-foreground/30"
-                                                    )}
-                                                >
-                                                    {selectedTitle === title.text && (
-                                                        <Check className="h-2 w-2 text-primary-foreground" />
-                                                    )}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <Badge variant="secondary" className="text-[9px] mb-1 capitalize">
-                                                        {title.variant}
-                                                    </Badge>
-                                                    <p className="text-xs leading-snug">{title.text}</p>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        <Skeleton className="h-12 w-full" />
-                                        <Skeleton className="h-12 w-full" />
-                                        <Skeleton className="h-12 w-full" />
-                                    </div>
-                                )}
-                            </ResultSection>
-
-                            <Separator />
-
-                            {/* Select Tags Section */}
-                            <ResultSection
-                                title="Select Tags"
-                                icon={<Hash className="h-4 w-4" />}
-                                onRegenerate={() => regenerateSection("tags")}
-                                isRegenerating={isRegenerating.tags}
-                                isLoading={!hasTags && isProcessing}
-                            >
-                                {hasTags ? (
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {aiDump!.tags.map((tag) => (
-                                            <button
-                                                key={tag.name}
-                                                onClick={() => toggleTag(tag.name)}
-                                                disabled={isProcessing}
-                                                className={cn(
-                                                    "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all disabled:opacity-60 disabled:cursor-not-allowed",
-                                                    selectedTags.includes(tag.name)
-                                                        ? "bg-primary text-primary-foreground"
-                                                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                                                )}
-                                            >
-                                                {selectedTags.includes(tag.name) ? (
-                                                    <Check className="h-2.5 w-2.5" />
-                                                ) : (
-                                                    <span className="w-2.5 h-2.5 rounded-full border border-current opacity-40" />
-                                                )}
-                                                {tag.name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-wrap gap-1.5">
-                                        <Skeleton className="h-6 w-16 rounded-full" />
-                                        <Skeleton className="h-6 w-20 rounded-full" />
-                                        <Skeleton className="h-6 w-14 rounded-full" />
-                                        <Skeleton className="h-6 w-18 rounded-full" />
-                                    </div>
-                                )}
-                            </ResultSection>
-
-                            <Separator />
-
-                            {/* Summary Section */}
-                            <div className="space-y-2">
-                                <button
-                                    onClick={() => toggleSectionCollapse("summary")}
-                                    className="flex items-center justify-between w-full text-left"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Summary</span>
-                                    </div>
-                                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", collapsedSections.summary && "-rotate-90")} />
-                                </button>
-                                {!collapsedSections.summary && (
-                                    <Card>
-                                        <CardContent className="p-3">
-                                            {hasSummary ? (
-                                                <p className="text-xs text-muted-foreground leading-relaxed">
-                                                    {aiDump!.summary}
-                                                </p>
-                                            ) : (
-                                                <div className="space-y-1.5">
-                                                    <Skeleton className="h-3 w-full" />
-                                                    <Skeleton className="h-3 w-full" />
-                                                    <Skeleton className="h-3 w-2/3" />
-                                                </div>
-                                            )}
-                                        </CardContent>
-                                    </Card>
-                                )}
-                            </div>
-
-                            <Separator />
-
-                            {/* Action Items (shown when the toggle produced any) */}
-                            {(hasActions || (isProcessing && options.toggles.actions)) && (
-                                <>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-2">
-                                            <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
-                                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                                Action Items
-                                            </span>
-                                        </div>
-                                        {hasActions ? (
-                                            <div className="space-y-1.5">
-                                                {aiDump!.actions.map((action, idx) => (
-                                                    <div
-                                                        key={idx}
-                                                        className="flex items-start gap-2 rounded-lg border bg-card p-2 text-xs"
-                                                    >
-                                                        <ListTodo className="h-3.5 w-3.5 mt-0.5 text-primary flex-shrink-0" />
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="leading-snug">{action.text}</p>
-                                                            {(action.assignee || action.due_date) && (
-                                                                <div className="mt-1 flex flex-wrap gap-1">
-                                                                    {action.assignee && (
-                                                                        <Badge variant="secondary" className="text-[9px]">
-                                                                            {action.assignee}
-                                                                        </Badge>
-                                                                    )}
-                                                                    {action.due_date && (
-                                                                        <Badge variant="outline" className="text-[9px]">
-                                                                            {action.due_date}
-                                                                        </Badge>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="space-y-1.5">
-                                                <Skeleton className="h-8 w-full" />
-                                                <Skeleton className="h-8 w-full" />
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <Separator />
-                                </>
-                            )}
-
-                            {/* Quick Actions */}
-                            <div className="space-y-2">
-                                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                    Quick Actions
-                                </h4>
-                                <div className="flex flex-wrap gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 text-xs gap-1"
-                                        onClick={() => {
-                                            const allContent = `# ${selectedTitle}\n\n${selectedTags.map(t => `#${t}`).join(" ")}\n\n${aiDump?.markdown || ""}`;
-                                            copyToClipboard(allContent, "all");
-                                        }}
-                                        disabled={!hasMarkdown}
-                                    >
-                                        {copiedSection === "all" ? (
-                                            <Check className="h-3 w-3 text-green-500" />
-                                        ) : (
-                                            <Copy className="h-3 w-3" />
-                                        )}
-                                        Copy All
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 text-xs gap-1"
-                                        onClick={() => regenerateSection("markdown")}
-                                        disabled={isRegenerating.markdown || !hasMarkdown}
-                                    >
-                                        <RefreshCw className={cn("h-3 w-3", isRegenerating.markdown && "animate-spin")} />
-                                        Regenerate
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-6">
-                            <Type className="h-10 w-10 mb-3 opacity-20" />
-                            <p className="text-sm text-center">Title, tags, and summary will appear here after processing</p>
-                        </div>
-                    )}
+                {/* Right Panel - Metadata & Actions (desktop inline; mobile in a Sheet) */}
+                <aside
+                    className="hidden lg:block flex-shrink-0 overflow-auto bg-muted/10"
+                    style={{ width: rightPanelWidth }}
+                >
+                    <MetadataPanel
+                        aiDump={aiDump}
+                        isProcessing={isProcessing}
+                        options={options}
+                        collapsedSections={collapsedSections}
+                        toggleSectionCollapse={toggleSectionCollapse}
+                        regenerateSection={regenerateSection}
+                        isRegenerating={isRegenerating}
+                        selectedTitle={selectedTitle}
+                        setSelectedTitle={setSelectedTitle}
+                        selectedTags={selectedTags}
+                        toggleTag={toggleTag}
+                        copyToClipboard={copyToClipboard}
+                        copiedSection={copiedSection}
+                        hasTitles={!!hasTitles}
+                        hasTags={!!hasTags}
+                        hasMarkdown={!!hasMarkdown}
+                        hasTldr={!!hasTldr}
+                        hasSummary={!!hasSummary}
+                        hasActions={!!hasActions}
+                    />
                 </aside>
             </div>
+
+            {/* Mobile: Options panel in a left Sheet */}
+            <Sheet open={optionsSheetOpen} onOpenChange={setOptionsSheetOpen}>
+                <SheetContent side="left" className="w-[88vw] max-w-[320px] overflow-auto p-0 lg:hidden">
+                    <SheetHeader className="px-4 pt-4 pb-0">
+                        <SheetTitle className="flex items-center gap-2 text-sm">
+                            <Settings2 className="h-4 w-4 text-primary" />
+                            Options
+                        </SheetTitle>
+                    </SheetHeader>
+                    <OptionsPanel
+                        options={options}
+                        handleOptionsChange={handleOptionsChange}
+                        isProcessing={isProcessing}
+                        detectedContentType={detectedContentType}
+                    />
+                </SheetContent>
+            </Sheet>
+
+            {/* Mobile: Metadata panel in a right Sheet */}
+            <Sheet open={metadataSheetOpen} onOpenChange={setMetadataSheetOpen}>
+                <SheetContent side="right" className="w-[88vw] max-w-[340px] overflow-auto p-0 lg:hidden">
+                    <SheetHeader className="px-4 pt-4 pb-0">
+                        <SheetTitle className="flex items-center gap-2 text-sm">
+                            <PanelRight className="h-4 w-4 text-primary" />
+                            Title, Tags & Summary
+                        </SheetTitle>
+                    </SheetHeader>
+                    <MetadataPanel
+                        aiDump={aiDump}
+                        isProcessing={isProcessing}
+                        options={options}
+                        collapsedSections={collapsedSections}
+                        toggleSectionCollapse={toggleSectionCollapse}
+                        regenerateSection={regenerateSection}
+                        isRegenerating={isRegenerating}
+                        selectedTitle={selectedTitle}
+                        setSelectedTitle={setSelectedTitle}
+                        selectedTags={selectedTags}
+                        toggleTag={toggleTag}
+                        copyToClipboard={copyToClipboard}
+                        copiedSection={copiedSection}
+                        hasTitles={!!hasTitles}
+                        hasTags={!!hasTags}
+                        hasMarkdown={!!hasMarkdown}
+                        hasTldr={!!hasTldr}
+                        hasSummary={!!hasSummary}
+                        hasActions={!!hasActions}
+                    />
+                </SheetContent>
+            </Sheet>
+
+            {/* Confirm permanent draft deletion */}
+            <Dialog
+                open={!!draftPendingDelete}
+                onOpenChange={(open) => {
+                    if (!open) setDraftPendingDelete(null);
+                }}
+            >
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Delete this draft?</DialogTitle>
+                        <DialogDescription>
+                            {draftPendingDelete?.title || "This untitled draft"} will be
+                            permanently removed. This can&apos;t be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setDraftPendingDelete(null)}
+                            disabled={!!deletingDraftId}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={confirmDeleteDraft}
+                            disabled={!!deletingDraftId}
+                            className="gap-1.5"
+                        >
+                            {deletingDraftId ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <X className="h-4 w-4" />
+                            )}
+                            Delete draft
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
@@ -1351,6 +1189,529 @@ export default function AIDumpPage() {
 // ============================================================================
 // Sub-Components
 // ============================================================================
+
+interface OptionsPanelProps {
+    options: AIDumpOptions;
+    handleOptionsChange: (newOptions: Partial<AIDumpOptions>) => void;
+    isProcessing: boolean;
+    detectedContentType: ContentTypeResult | null;
+}
+
+function OptionsPanel({
+    options,
+    handleOptionsChange,
+    isProcessing,
+    detectedContentType,
+}: OptionsPanelProps) {
+    // Unique per-instance id; OptionsPanel renders twice (desktop aside + mobile
+    // Sheet), so a hardcoded id would collide and break aria-labelledby.
+    const creativityLabelId = useId();
+    return (
+        <div className="p-4 space-y-5">
+            <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    Template
+                </h3>
+                <Select
+                    value={options.template}
+                    onValueChange={(v) => handleOptionsChange({ template: v as AIDumpOptions["template"] })}
+                    disabled={isProcessing}
+                >
+                    <SelectTrigger className="w-full h-9">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="auto">
+                            <span className="flex items-center gap-2">
+                                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                                Auto-detect
+                            </span>
+                        </SelectItem>
+                        <SelectItem value="meeting">
+                            <span className="flex items-center gap-2">
+                                <Users className="h-3.5 w-3.5 text-blue-500" />
+                                Meeting Notes
+                            </span>
+                        </SelectItem>
+                        <SelectItem value="research">
+                            <span className="flex items-center gap-2">
+                                <BookOpen className="h-3.5 w-3.5 text-green-500" />
+                                Research Notes
+                            </span>
+                        </SelectItem>
+                        <SelectItem value="code-review">
+                            <span className="flex items-center gap-2">
+                                <FileCode className="h-3.5 w-3.5 text-orange-500" />
+                                Code Review
+                            </span>
+                        </SelectItem>
+                        <SelectItem value="code">
+                            <span className="flex items-center gap-2">
+                                <FileCode className="h-3.5 w-3.5 text-rose-500" />
+                                Technical Docs
+                            </span>
+                        </SelectItem>
+                        <SelectItem value="brainstorm">
+                            <span className="flex items-center gap-2">
+                                <Lightbulb className="h-3.5 w-3.5 text-yellow-500" />
+                                Brainstorm
+                            </span>
+                        </SelectItem>
+                        <SelectItem value="lecture">
+                            <span className="flex items-center gap-2">
+                                <GraduationCap className="h-3.5 w-3.5 text-purple-500" />
+                                Lecture Notes
+                            </span>
+                        </SelectItem>
+                        <SelectItem value="article">
+                            <span className="flex items-center gap-2">
+                                <FileText className="h-3.5 w-3.5 text-cyan-500" />
+                                Article Summary
+                            </span>
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+                {/* Template description */}
+                <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
+                    {options.template === "auto" && "AI will analyze content and choose the best format."}
+                    {options.template === "meeting" && "Extracts attendees, decisions, and action items."}
+                    {options.template === "research" && "Organizes findings with sources and methodology."}
+                    {options.template === "code-review" && "Documents issues, suggestions, and good patterns."}
+                    {options.template === "brainstorm" && "Groups ideas by theme and highlights top concepts."}
+                    {options.template === "lecture" && "Formats with objectives, concepts, and summary."}
+                    {options.template === "article" && "Summarizes with key points and takeaways."}
+                    {options.template === "code" && "Documents code with explanations and examples."}
+                </p>
+                {/* Detected content type badge */}
+                {detectedContentType && detectedContentType.confidence > 0.4 && (
+                    <div className="mt-3 flex items-center gap-2">
+                        <Badge
+                            variant="secondary"
+                            className={cn("text-[10px] gap-1", getContentTypeDisplay(detectedContentType.type).color)}
+                        >
+                            <Zap className="h-2.5 w-2.5" />
+                            Detected: {getContentTypeDisplay(detectedContentType.type).label}
+                        </Badge>
+                        {detectedContentType.suggestedTemplate !== options.template &&
+                            detectedContentType.suggestedTemplate !== "auto" && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-5 text-[10px] px-2"
+                                    onClick={() => handleOptionsChange({ template: detectedContentType.suggestedTemplate as AIDumpOptions["template"] })}
+                                >
+                                    Use
+                                </Button>
+                            )}
+                    </div>
+                )}
+            </div>
+
+            <Separator />
+
+            <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    Generate
+                </h3>
+                <div className="space-y-2.5">
+                    <ToggleOption
+                        label="Title Variants"
+                        icon={<Type className="h-3.5 w-3.5" />}
+                        checked={options.toggles.titles}
+                        onChange={() => handleOptionsChange({ toggles: { ...options.toggles, titles: !options.toggles.titles } })}
+                        disabled={isProcessing}
+                    />
+                    <ToggleOption
+                        label="Smart Tags"
+                        icon={<Hash className="h-3.5 w-3.5" />}
+                        checked={options.toggles.tags}
+                        onChange={() => handleOptionsChange({ toggles: { ...options.toggles, tags: !options.toggles.tags } })}
+                        disabled={isProcessing}
+                    />
+                    <ToggleOption
+                        label="Structured Markdown"
+                        icon={<FileCode className="h-3.5 w-3.5" />}
+                        checked={options.toggles.markdown}
+                        onChange={() => handleOptionsChange({ toggles: { ...options.toggles, markdown: !options.toggles.markdown } })}
+                        disabled={isProcessing}
+                    />
+                    <ToggleOption
+                        label="Action Items"
+                        icon={<ListTodo className="h-3.5 w-3.5" />}
+                        checked={options.toggles.actions}
+                        onChange={() => handleOptionsChange({ toggles: { ...options.toggles, actions: !options.toggles.actions } })}
+                        disabled={isProcessing}
+                    />
+                </div>
+            </div>
+
+            <Separator />
+
+            <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    Tone
+                </h3>
+                <Select
+                    value={options.tone}
+                    onValueChange={(v) => handleOptionsChange({ tone: v as AIDumpOptions["tone"] })}
+                    disabled={isProcessing}
+                >
+                    <SelectTrigger className="w-full h-9">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="balanced">Balanced</SelectItem>
+                        <SelectItem value="formal">Formal</SelectItem>
+                        <SelectItem value="casual">Casual</SelectItem>
+                        <SelectItem value="technical">Technical</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <Separator />
+
+            <div>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 id={creativityLabelId} className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Creativity
+                    </h3>
+                    <span className="text-xs text-muted-foreground font-mono">
+                        {options.temperature.toFixed(1)}
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={options.temperature}
+                    onChange={(e) => handleOptionsChange({ temperature: parseFloat(e.target.value) })}
+                    disabled={isProcessing}
+                    aria-labelledby={creativityLabelId}
+                    aria-valuetext={`${options.temperature.toFixed(1)} — ${
+                        options.temperature <= 0.3
+                            ? "precise"
+                            : options.temperature >= 0.7
+                              ? "creative"
+                              : "balanced"
+                    }`}
+                    className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                    <span>Precise</span>
+                    <span>Creative</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+interface MetadataPanelProps {
+    aiDump: AIDumpData | null;
+    isProcessing: boolean;
+    options: AIDumpOptions;
+    collapsedSections: Record<string, boolean>;
+    toggleSectionCollapse: (section: string) => void;
+    regenerateSection: (section: "titles" | "tags" | "markdown" | "actions") => void;
+    isRegenerating: Record<"titles" | "tags" | "markdown" | "actions", boolean>;
+    selectedTitle: string;
+    setSelectedTitle: (title: string) => void;
+    selectedTags: string[];
+    toggleTag: (tag: string) => void;
+    copyToClipboard: (text: string, section: string) => void;
+    copiedSection: string | null;
+    hasTitles: boolean;
+    hasTags: boolean;
+    hasMarkdown: boolean;
+    hasTldr: boolean;
+    hasSummary: boolean;
+    hasActions: boolean;
+}
+
+function MetadataPanel({
+    aiDump,
+    isProcessing,
+    options,
+    collapsedSections,
+    toggleSectionCollapse,
+    regenerateSection,
+    isRegenerating,
+    selectedTitle,
+    setSelectedTitle,
+    selectedTags,
+    toggleTag,
+    copyToClipboard,
+    copiedSection,
+    hasTitles,
+    hasTags,
+    hasMarkdown,
+    hasTldr,
+    hasSummary,
+    hasActions,
+}: MetadataPanelProps) {
+    if (!aiDump && !isProcessing) {
+        return (
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-6">
+                <Type className="h-10 w-10 mb-3 opacity-20" />
+                <p className="text-sm text-center">Title, tags, and summary will appear here after processing</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="p-4 space-y-4">
+            {/* TL;DR Section */}
+            <div className="space-y-2">
+                <button
+                    onClick={() => toggleSectionCollapse("tldr")}
+                    aria-expanded={!collapsedSections.tldr}
+                    className="flex items-center justify-between w-full text-left"
+                >
+                    <div className="flex items-center gap-2">
+                        <Sparkles className="h-3.5 w-3.5 text-primary" />
+                        <span className="text-xs font-semibold uppercase tracking-wider text-primary">TL;DR</span>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", collapsedSections.tldr && "-rotate-90")} />
+                </button>
+                {!collapsedSections.tldr && (
+                    <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+                        <CardContent className="p-3">
+                            {hasTldr ? (
+                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                    {aiDump!.tldr}
+                                </p>
+                            ) : (
+                                <Skeleton className="h-4 w-full" />
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
+
+            <Separator />
+
+            {/* Choose Title Section */}
+            <ResultSection
+                title="Choose Title"
+                icon={<Type className="h-4 w-4" />}
+                onRegenerate={() => regenerateSection("titles")}
+                isRegenerating={isRegenerating.titles}
+                isLoading={!hasTitles && isProcessing}
+            >
+                {hasTitles ? (
+                    <div className="space-y-2" role="radiogroup" aria-label="Choose a title">
+                        {aiDump!.titles.map((title, idx) => (
+                            <button
+                                key={idx}
+                                role="radio"
+                                aria-checked={selectedTitle === title.text}
+                                onClick={() => setSelectedTitle(title.text)}
+                                disabled={isProcessing}
+                                className={cn(
+                                    "w-full flex items-center gap-2 p-2 rounded-lg border text-left transition-all text-xs disabled:opacity-60 disabled:cursor-not-allowed",
+                                    selectedTitle === title.text
+                                        ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                                        : "border-muted hover:border-primary/30 hover:bg-muted/50"
+                                )}
+                            >
+                                <div
+                                    className={cn(
+                                        "w-3 h-3 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                                        selectedTitle === title.text
+                                            ? "border-primary bg-primary"
+                                            : "border-muted-foreground/30"
+                                    )}
+                                >
+                                    {selectedTitle === title.text && (
+                                        <Check className="h-2 w-2 text-primary-foreground" />
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <Badge variant="secondary" className="text-[9px] mb-1 capitalize">
+                                        {title.variant}
+                                    </Badge>
+                                    <p className="text-xs leading-snug">{title.text}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                    </div>
+                )}
+            </ResultSection>
+
+            <Separator />
+
+            {/* Select Tags Section */}
+            <ResultSection
+                title="Select Tags"
+                icon={<Hash className="h-4 w-4" />}
+                onRegenerate={() => regenerateSection("tags")}
+                isRegenerating={isRegenerating.tags}
+                isLoading={!hasTags && isProcessing}
+            >
+                {hasTags ? (
+                    <div className="flex flex-wrap gap-1.5">
+                        {aiDump!.tags.map((tag) => (
+                            <button
+                                key={tag.name}
+                                aria-pressed={selectedTags.includes(tag.name)}
+                                onClick={() => toggleTag(tag.name)}
+                                disabled={isProcessing}
+                                className={cn(
+                                    "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all disabled:opacity-60 disabled:cursor-not-allowed",
+                                    selectedTags.includes(tag.name)
+                                        ? "bg-primary text-primary-foreground"
+                                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                                )}
+                            >
+                                {selectedTags.includes(tag.name) ? (
+                                    <Check className="h-2.5 w-2.5" />
+                                ) : (
+                                    <span className="w-2.5 h-2.5 rounded-full border border-current opacity-40" />
+                                )}
+                                {tag.name}
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                        <Skeleton className="h-6 w-16 rounded-full" />
+                        <Skeleton className="h-6 w-20 rounded-full" />
+                        <Skeleton className="h-6 w-14 rounded-full" />
+                        <Skeleton className="h-6 w-18 rounded-full" />
+                    </div>
+                )}
+            </ResultSection>
+
+            <Separator />
+
+            {/* Summary Section */}
+            <div className="space-y-2">
+                <button
+                    onClick={() => toggleSectionCollapse("summary")}
+                    aria-expanded={!collapsedSections.summary}
+                    className="flex items-center justify-between w-full text-left"
+                >
+                    <div className="flex items-center gap-2">
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Summary</span>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", collapsedSections.summary && "-rotate-90")} />
+                </button>
+                {!collapsedSections.summary && (
+                    <Card>
+                        <CardContent className="p-3">
+                            {hasSummary ? (
+                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                    {aiDump!.summary}
+                                </p>
+                            ) : (
+                                <div className="space-y-1.5">
+                                    <Skeleton className="h-3 w-full" />
+                                    <Skeleton className="h-3 w-full" />
+                                    <Skeleton className="h-3 w-2/3" />
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
+
+            <Separator />
+
+            {/* Action Items (shown when the toggle produced any) */}
+            {(hasActions || (isProcessing && options.toggles.actions)) && (
+                <>
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                Action Items
+                            </span>
+                        </div>
+                        {hasActions ? (
+                            <div className="space-y-1.5">
+                                {aiDump!.actions.map((action, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="flex items-start gap-2 rounded-lg border bg-card p-2 text-xs"
+                                    >
+                                        <ListTodo className="h-3.5 w-3.5 mt-0.5 text-primary flex-shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="leading-snug">{action.text}</p>
+                                            {(action.assignee || action.due_date) && (
+                                                <div className="mt-1 flex flex-wrap gap-1">
+                                                    {action.assignee && (
+                                                        <Badge variant="secondary" className="text-[9px]">
+                                                            {action.assignee}
+                                                        </Badge>
+                                                    )}
+                                                    {action.due_date && (
+                                                        <Badge variant="outline" className="text-[9px]">
+                                                            {action.due_date}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="space-y-1.5">
+                                <Skeleton className="h-8 w-full" />
+                                <Skeleton className="h-8 w-full" />
+                            </div>
+                        )}
+                    </div>
+
+                    <Separator />
+                </>
+            )}
+
+            {/* Quick Actions */}
+            <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Quick Actions
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => {
+                            const allContent = `# ${selectedTitle}\n\n${selectedTags.map(t => `#${t}`).join(" ")}\n\n${aiDump?.markdown || ""}`;
+                            copyToClipboard(allContent, "all");
+                        }}
+                        disabled={!hasMarkdown}
+                    >
+                        {copiedSection === "all" ? (
+                            <Check className="h-3 w-3 text-green-500" />
+                        ) : (
+                            <Copy className="h-3 w-3" />
+                        )}
+                        Copy All
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => regenerateSection("markdown")}
+                        disabled={isRegenerating.markdown || !hasMarkdown}
+                    >
+                        <RefreshCw className={cn("h-3 w-3", isRegenerating.markdown && "animate-spin")} />
+                        Regenerate
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 function ToggleOption({
     label,

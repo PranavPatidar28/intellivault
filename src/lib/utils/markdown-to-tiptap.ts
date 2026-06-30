@@ -66,10 +66,13 @@ export function markdownToTipTap(markdown: string): TipTapDocument {
                 i++;
             }
             i++; // Skip closing ```
+            // ProseMirror rejects empty text nodes, so only attach a text child
+            // when the fence actually contains code (empty fences -> empty content).
+            const code = codeLines.join("\n");
             content.push({
                 type: "codeBlock",
                 attrs: { language },
-                content: [{ type: "text", text: codeLines.join("\n") }],
+                content: code ? [{ type: "text", text: code }] : [],
             });
             continue;
         }

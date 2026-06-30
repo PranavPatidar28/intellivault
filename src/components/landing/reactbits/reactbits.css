@@ -1,0 +1,167 @@
+/* Keyframes + styles for React Bits primitives used on the landing page.
+   Co-located with the components rather than dumped into globals.css. */
+
+/* ---- GradientText ---- */
+.rb-gradient-text {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-size: 300% 100%;
+  animation-name: rb-gradient-pan;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes rb-gradient-pan {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* ---- ShinyText ---- */
+.rb-shiny-text {
+  color: rgba(255, 255, 255, 0.55);
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0.95) 50%,
+    rgba(255, 255, 255, 0) 60%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  display: inline-block;
+  animation-name: rb-shine;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.rb-shiny-text--off {
+  animation: none;
+}
+@keyframes rb-shine {
+  0% {
+    background-position: 100%;
+  }
+  100% {
+    background-position: -100%;
+  }
+}
+
+/* ---- StarBorder ---- */
+.rb-star-border {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: transparent;
+}
+.rb-star-border__trail {
+  position: absolute;
+  width: 320%;
+  height: 60%;
+  opacity: 0.7;
+  z-index: 0;
+  border-radius: 9999px;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.rb-star-border__trail--bottom {
+  bottom: -14px;
+  right: -260%;
+  animation-name: rb-star-move-bottom;
+}
+.rb-star-border__trail--top {
+  top: -14px;
+  left: -260%;
+  animation-name: rb-star-move-top;
+}
+.rb-star-border__inner {
+  position: relative;
+  z-index: 1;
+  border-radius: 9999px;
+  background: linear-gradient(
+    180deg,
+    rgba(11,22,26, 0.9),
+    rgba(8,14,18, 0.95)
+  );
+}
+@keyframes rb-star-move-bottom {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+@keyframes rb-star-move-top {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rb-gradient-text,
+  .rb-shiny-text,
+  .rb-star-border__trail {
+    animation: none !important;
+  }
+  .rb-shiny-text {
+    color: rgba(255, 255, 255, 0.85);
+    -webkit-text-fill-color: rgba(255, 255, 255, 0.85);
+  }
+}
+
+/* ---- Spectral eyebrow ----
+   Static cyan "refraction" gradient. Echoes the hero prism on section
+   eyebrows without animating or drifting off the brand ramp. */
+.rb-spectral-text {
+  background-image: linear-gradient(
+    90deg,
+    #4fd1e0 0%,
+    #8ae5ef 45%,
+    #c5f2f7 72%,
+    #a6ecf3 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ---- Hero product demo ---- */
+@keyframes demo-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes demo-scan {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(220px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[demo-blink_1s_steps\(2\)_infinite\] {
+    animation: none !important;
+  }
+}
