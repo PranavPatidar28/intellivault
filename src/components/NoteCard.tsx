@@ -12,7 +12,6 @@ import {
 import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
 import { getRelativeTime, truncateText } from "@/lib/utils/text";
-import { Badge } from "./ui/badge";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -109,13 +108,12 @@ function NotesCard({
         // Responsive padding
         "min-h-[180px] sm:min-h-[200px]",
         // Animations & transitions
-        "transition-all duration-300 ease-out",
-        "hover:shadow-xl hover:-translate-y-1",
-        // Border styling with gradient on hover
-        "border-border/50 hover:border-primary/30",
-        "bg-card/80 backdrop-blur-sm hover:bg-card",
+        "transition-all duration-200 ease-out",
+        "hover:shadow-md hover:-translate-y-0.5",
+        // Border styling
+        "hover:border-ring/40",
         // Pinned state
-        isPinned && "ring-2 ring-primary/20 border-primary/40",
+        isPinned && "ring-1 ring-primary/30 border-primary/40 bg-primary/[0.03]",
         // Reduced motion support
         "motion-reduce:transition-none motion-reduce:hover:transform-none"
       )}
@@ -127,13 +125,15 @@ function NotesCard({
     >
       {/* Pinned indicator */}
       {isPinned && (
-        <div className="absolute top-2 left-2 z-10">
+        <div className="absolute top-2.5 left-2.5 z-10">
           <Pin size={14} className="text-primary fill-primary" />
         </div>
       )}
 
-      {/* Actions - Delete button and context menu */}
-      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 z-10">
+      {/* Actions - context menu. Kept faintly visible at rest (not hover-only)
+          so the menu is discoverable and reachable on touch devices; lifts to
+          full opacity on hover/focus. */}
+      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-70 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 z-10">
         {/* Context Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -224,22 +224,17 @@ function NotesCard({
           {tags && tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {tags.slice(0, visibleTagCount).map((tag) => (
-                <Badge
+                <span
                   key={tag.id}
-                  variant="outline"
-                  className={cn(
-                    "text-[10px] px-2 py-0.5 h-5 font-medium",
-                    "border-transparent transition-colors",
-                    "bg-secondary/50 text-secondary-foreground hover:bg-secondary/80"
-                  )}
-                  style={tag.color ? {
-                    backgroundColor: `${tag.color}15`,
-                    color: tag.color,
-                    borderColor: `${tag.color}30`
-                  } : undefined}
+                  className="inline-flex items-center gap-1.5 rounded-full border bg-secondary/50 px-2 py-0.5 text-[10px] font-medium text-secondary-foreground"
                 >
+                  <span
+                    className="size-2 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+                    style={{ backgroundColor: tag.color || "var(--muted-foreground)" }}
+                    aria-hidden="true"
+                  />
                   {tag.name}
-                </Badge>
+                </span>
               ))}
               {tags.length > visibleTagCount && (
                 <span className="text-[10px] text-muted-foreground font-medium flex items-center px-1">

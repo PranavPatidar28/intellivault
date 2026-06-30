@@ -20,6 +20,16 @@ const ACCENT_STYLES: Record<number, string> = {
   5: "text-[var(--chart-5)] bg-[color-mix(in_oklch,var(--chart-5)_18%,transparent)]",
 };
 
+// Top hairline accent in the matching chart hue — gives each card a touch of
+// brand colour without tinting the whole surface.
+const ACCENT_BAR: Record<number, string> = {
+  1: "before:bg-[var(--chart-1)]",
+  2: "before:bg-[var(--chart-2)]",
+  3: "before:bg-[var(--chart-3)]",
+  4: "before:bg-[var(--chart-4)]",
+  5: "before:bg-[var(--chart-5)]",
+};
+
 export function StatCard({
   label,
   value,
@@ -28,11 +38,19 @@ export function StatCard({
   accent = 1,
 }: StatCardProps) {
   return (
-    <Card className="gap-0 py-0">
+    <Card
+      className={cn(
+        "relative gap-0 overflow-hidden py-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
+        "before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:opacity-80",
+        ACCENT_BAR[accent]
+      )}
+    >
       <CardContent className="flex items-start justify-between gap-3 p-4 sm:p-5">
         <div className="min-w-0">
-          <p className="truncate text-sm text-muted-foreground">{label}</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums sm:text-3xl">
+          <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
+          <p className="mt-1.5 text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
             {value}
           </p>
           {hint ? (
@@ -41,7 +59,7 @@ export function StatCard({
         </div>
         <span
           className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-lg",
+            "flex size-11 shrink-0 items-center justify-center rounded-xl",
             ACCENT_STYLES[accent]
           )}
           aria-hidden="true"

@@ -1,5 +1,5 @@
 import React from "react";
-import { Separator } from "./ui/separator";
+import { cn } from "@/lib/utils";
 
 export const Topbar = ({
   children,
@@ -9,11 +9,15 @@ export const Topbar = ({
   className?: string;
 }>) => {
   return (
-    <section className={className}>
-      <div className="h-12 w-full flex justify-between items-center p-2">
+    <header
+      className={cn(
+        "sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/65",
+        className
+      )}
+    >
+      <div className="flex h-14 w-full items-center justify-between gap-3 px-2">
         {children}
       </div>
-      <Separator />
-    </section>
+    </header>
   );
 };

@@ -509,8 +509,10 @@ export default function AIDumpPage() {
                         </Button>
                     </Link>
                     <div className="min-w-0">
-                        <h1 className="text-lg font-semibold flex items-center gap-2 truncate">
-                            <Wand2 className="h-4 w-4 text-primary flex-shrink-0" />
+                        <h1 className="text-lg font-semibold flex items-center gap-2 truncate tracking-tight">
+                            <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
+                                <Wand2 className="h-4 w-4" />
+                            </span>
                             AI Dump
                         </h1>
                     </div>
@@ -625,10 +627,10 @@ export default function AIDumpPage() {
                                     onDragOver={handleDragOver}
                                     onDrop={handleDrop}
                                     className={cn(
-                                        "relative flex-1 min-h-[300px] border-2 border-dashed rounded-lg transition-all",
+                                        "relative flex-1 min-h-[300px] border-2 border-dashed rounded-xl transition-all",
                                         isDragging
                                             ? "border-primary bg-primary/5"
-                                            : "border-muted hover:border-muted-foreground/30"
+                                            : "border-border hover:border-ring/50"
                                     )}
                                 >
                                     {/* Drag overlay */}
@@ -727,7 +729,7 @@ export default function AIDumpPage() {
                                     >
                                         <Wand2 className="h-4 w-4" />
                                         Run AI Dump
-                                        <kbd className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary-foreground/20 rounded font-mono">
+                                        <kbd className="ml-1 px-1.5 py-0.5 text-xs bg-primary-foreground/20 rounded font-mono">
                                             {isApple ? "⌘↵" : "Ctrl ↵"}
                                         </kbd>
                                     </Button>
@@ -750,7 +752,7 @@ export default function AIDumpPage() {
                                                     <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
                                                 )}
                                             </div>
-                                            <span className="text-[10px] text-muted-foreground">
+                                            <span className="text-xs text-muted-foreground">
                                                 Drafts auto-delete after 7 days
                                             </span>
                                         </div>
@@ -768,11 +770,11 @@ export default function AIDumpPage() {
                                                             {draft.title || "Untitled draft"}
                                                         </p>
                                                         {draft.tldr && (
-                                                            <p className="text-[11px] text-muted-foreground truncate">
+                                                            <p className="text-xs text-muted-foreground truncate">
                                                                 {draft.tldr}
                                                             </p>
                                                         )}
-                                                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                        <p className="text-xs text-muted-foreground mt-0.5">
                                                             {getRelativeTime(draft.updatedAt)}
                                                         </p>
                                                     </button>
@@ -819,7 +821,7 @@ export default function AIDumpPage() {
                                 <div className="flex items-center gap-1">
                                     {/* Output size indicator */}
                                     {hasMarkdown && previewTab === "generated" && !isProcessing && (
-                                        <span className="text-[10px] text-muted-foreground mr-2 font-mono">
+                                        <span className="text-xs text-muted-foreground mr-2 font-mono">
                                             {(() => {
                                                 const md = editedMarkdown || aiDump?.markdown || "";
                                                 const words = md.trim().split(/\s+/).filter(Boolean).length;
@@ -858,7 +860,7 @@ export default function AIDumpPage() {
                                             onClick={() => copyToClipboard(editedMarkdown || aiDump!.markdown, "markdown")}
                                         >
                                             {copiedSection === "markdown" ? (
-                                                <Check className="h-3 w-3 mr-1 text-green-500" />
+                                                <Check className="h-3 w-3 mr-1 text-success" />
                                             ) : (
                                                 <Copy className="h-3 w-3 mr-1" />
                                             )}
@@ -904,7 +906,7 @@ export default function AIDumpPage() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
-                                                                className="h-6 text-[11px] gap-1 flex-shrink-0"
+                                                                className="h-6 text-xs gap-1 flex-shrink-0"
                                                                 onClick={() => setEditedMarkdown(aiDump.markdown)}
                                                             >
                                                                 <RotateCcw className="h-3 w-3" />
@@ -1025,18 +1027,18 @@ export default function AIDumpPage() {
                                     {hasMarkdown ? (
                                         <div className="p-6 space-y-4">
                                             <div>
-                                                <Badge variant="outline" className="mb-2 text-xs bg-red-500/10 text-red-600 border-red-200">
+                                                <Badge variant="outline" className="mb-2 text-xs bg-destructive/10 text-destructive border-destructive/30">
                                                     Original ({inputContent.length} chars)
                                                 </Badge>
-                                                <pre className="text-xs font-mono whitespace-pre-wrap text-muted-foreground max-h-40 overflow-auto bg-muted/50 rounded p-2">
+                                                <pre className="text-xs font-mono whitespace-pre-wrap text-muted-foreground max-h-40 overflow-auto bg-muted/50 rounded-md p-2">
                                                     {inputContent.slice(0, 500)}{inputContent.length > 500 ? "..." : ""}
                                                 </pre>
                                             </div>
                                             <div>
-                                                <Badge variant="outline" className="mb-2 text-xs bg-green-500/10 text-green-600 border-green-200">
+                                                <Badge variant="outline" className="mb-2 text-xs bg-success/10 text-success border-success/30">
                                                     Generated ({aiDump!.markdown.length} chars)
                                                 </Badge>
-                                                <pre className="text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto bg-muted/50 rounded p-2">
+                                                <pre className="text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto bg-muted/50 rounded-md p-2">
                                                     {aiDump!.markdown.slice(0, 500)}{aiDump!.markdown.length > 500 ? "..." : ""}
                                                 </pre>
                                             </div>
@@ -1235,7 +1237,7 @@ function OptionsPanel({
                         </SelectItem>
                         <SelectItem value="research">
                             <span className="flex items-center gap-2">
-                                <BookOpen className="h-3.5 w-3.5 text-green-500" />
+                                <BookOpen className="h-3.5 w-3.5 text-success" />
                                 Research Notes
                             </span>
                         </SelectItem>
@@ -1272,7 +1274,7 @@ function OptionsPanel({
                     </SelectContent>
                 </Select>
                 {/* Template description */}
-                <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
+                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
                     {options.template === "auto" && "AI will analyze content and choose the best format."}
                     {options.template === "meeting" && "Extracts attendees, decisions, and action items."}
                     {options.template === "research" && "Organizes findings with sources and methodology."}
@@ -1287,7 +1289,7 @@ function OptionsPanel({
                     <div className="mt-3 flex items-center gap-2">
                         <Badge
                             variant="secondary"
-                            className={cn("text-[10px] gap-1", getContentTypeDisplay(detectedContentType.type).color)}
+                            className={cn("text-xs gap-1", getContentTypeDisplay(detectedContentType.type).color)}
                         >
                             <Zap className="h-2.5 w-2.5" />
                             Detected: {getContentTypeDisplay(detectedContentType.type).label}
@@ -1297,7 +1299,7 @@ function OptionsPanel({
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-5 text-[10px] px-2"
+                                    className="h-5 text-xs px-2"
                                     onClick={() => handleOptionsChange({ template: detectedContentType.suggestedTemplate as AIDumpOptions["template"] })}
                                 >
                                     Use
@@ -1397,7 +1399,7 @@ function OptionsPanel({
                     }`}
                     className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
                 />
-                <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
                     <span>Precise</span>
                     <span>Creative</span>
                 </div>
@@ -1527,7 +1529,7 @@ function MetadataPanel({
                                     )}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <Badge variant="secondary" className="text-[9px] mb-1 capitalize">
+                                    <Badge variant="secondary" className="text-xs mb-1 capitalize">
                                         {title.variant}
                                     </Badge>
                                     <p className="text-xs leading-snug">{title.text}</p>
@@ -1647,12 +1649,12 @@ function MetadataPanel({
                                             {(action.assignee || action.due_date) && (
                                                 <div className="mt-1 flex flex-wrap gap-1">
                                                     {action.assignee && (
-                                                        <Badge variant="secondary" className="text-[9px]">
+                                                        <Badge variant="secondary" className="text-xs">
                                                             {action.assignee}
                                                         </Badge>
                                                     )}
                                                     {action.due_date && (
-                                                        <Badge variant="outline" className="text-[9px]">
+                                                        <Badge variant="outline" className="text-xs">
                                                             {action.due_date}
                                                         </Badge>
                                                     )}
@@ -1691,7 +1693,7 @@ function MetadataPanel({
                         disabled={!hasMarkdown}
                     >
                         {copiedSection === "all" ? (
-                            <Check className="h-3 w-3 text-green-500" />
+                            <Check className="h-3 w-3 text-success" />
                         ) : (
                             <Copy className="h-3 w-3" />
                         )}

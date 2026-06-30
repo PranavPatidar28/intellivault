@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/card";
 import { requireAuth } from "@/lib/session";
 import prisma from "@/lib/prisma";
-import { getTextColorForBackground } from "@/lib/utils/tagColors";
 import {
   NotesActivityChart,
   type ActivityPoint,
@@ -166,7 +165,9 @@ export default async function DashboardPage() {
   return (
     <div className="flex h-full flex-col">
       <Topbar className="flex-shrink-0">
-        <h1 className="p-2 text-lg font-semibold">Dashboard</h1>
+        <h1 className="pl-2 text-base font-semibold tracking-tight sm:text-lg">
+          Dashboard
+        </h1>
         <div className="flex items-center gap-2 pr-1">
           <Button asChild size="sm" variant="outline">
             <Link href="/aidump">
@@ -184,12 +185,12 @@ export default async function DashboardPage() {
       </Topbar>
 
       <div className="h-full overflow-y-auto">
-        <div className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">
+        <div className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6 lg:space-y-8">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
               Welcome back, {greetingName}
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground sm:text-base">
               Here&apos;s what&apos;s happening across your vault.
             </p>
           </div>
@@ -235,8 +236,10 @@ export default async function DashboardPage() {
                 {/* Activity chart */}
                 <Card className="lg:col-span-2">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="size-4 text-muted-foreground" />
+                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                      <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <TrendingUp className="size-4" />
+                      </span>
                       Notes created
                     </CardTitle>
                     <CardDescription>
@@ -252,7 +255,9 @@ export default async function DashboardPage() {
                 {/* Recent notes */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Recent notes</CardTitle>
+                    <CardTitle className="text-base font-semibold">
+                      Recent notes
+                    </CardTitle>
                     <CardDescription>Your latest activity</CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -261,7 +266,7 @@ export default async function DashboardPage() {
                         No notes yet.
                       </p>
                     ) : (
-                      <ul className="space-y-1">
+                      <ul className="-mx-2 space-y-0.5">
                         {recentNotes.map((note) => {
                           const title =
                             note.title?.trim() ||
@@ -271,17 +276,19 @@ export default async function DashboardPage() {
                             <li key={note.id}>
                               <Link
                                 href={`/notes/${note.id}`}
-                                className="group flex items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                                className="group flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
                               >
-                                {note.isPinned ? (
-                                  <Pin className="size-3.5 shrink-0 text-muted-foreground" />
-                                ) : (
-                                  <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                                )}
+                                <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                                  {note.isPinned ? (
+                                    <Pin className="size-3.5" />
+                                  ) : (
+                                    <FileText className="size-3.5" />
+                                  )}
+                                </span>
                                 <span className="min-w-0 flex-1 truncate font-medium">
                                   {title}
                                 </span>
-                                <span className="shrink-0 text-xs text-muted-foreground">
+                                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                                   {formatRelative(note.updatedAt)}
                                 </span>
                               </Link>
@@ -294,11 +301,11 @@ export default async function DashboardPage() {
                       asChild
                       variant="ghost"
                       size="sm"
-                      className="mt-2 w-full justify-between"
+                      className="group mt-2 w-full justify-between"
                     >
                       <Link href="/notes">
                         View all notes
-                        <ArrowRight className="size-4" />
+                        <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
                       </Link>
                     </Button>
                   </CardContent>
@@ -309,7 +316,9 @@ export default async function DashboardPage() {
               {tagsWithNotes.length > 0 ? (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Top tags</CardTitle>
+                    <CardTitle className="text-base font-semibold">
+                      Top tags
+                    </CardTitle>
                     <CardDescription>
                       Your most-used tags by note count
                     </CardDescription>
@@ -320,24 +329,19 @@ export default async function DashboardPage() {
                         <Link
                           key={tag.id}
                           href={`/tags?id=${tag.id}`}
-                          className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="group inline-flex items-center gap-2 rounded-full border bg-card py-1 pl-2.5 pr-1.5 text-sm font-medium shadow-xs transition-all hover:-translate-y-0.5 hover:border-ring/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <span
-                            className="inline-flex items-center rounded-full px-1.5 text-xs font-medium"
+                            className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
                             style={
                               tag.color
-                                ? {
-                                    backgroundColor: tag.color,
-                                    color: getTextColorForBackground(
-                                      tag.color
-                                    ),
-                                  }
-                                : undefined
+                                ? { backgroundColor: tag.color }
+                                : { backgroundColor: "var(--muted-foreground)" }
                             }
-                          >
-                            {tag.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground tabular-nums">
+                            aria-hidden="true"
+                          />
+                          <span className="truncate">{tag.name}</span>
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs text-muted-foreground tabular-nums">
                             {tag._count.notes}
                           </span>
                         </Link>

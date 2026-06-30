@@ -379,7 +379,7 @@ export default function NotePage() {
                 <span>Unsaved changes</span>
               </div>
             ) : saveStatus === "saved" ? (
-              <div className="flex items-center gap-1 text-sm text-green-600">
+              <div className="flex items-center gap-1 text-sm text-success">
                 <CheckCircleIcon size={16} />
                 <span>Saved</span>
               </div>

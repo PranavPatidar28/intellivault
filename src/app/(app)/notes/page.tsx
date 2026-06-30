@@ -83,7 +83,7 @@ const NotesList = ({ notes, onDelete, onPin }: {
   onDelete: (id: string) => void;
   onPin: (id: string, isPinned: boolean) => void;
 }) => (
-  <div className="border rounded-lg mx-4 my-4 bg-card/50 overflow-hidden">
+  <div className="border rounded-xl mx-4 my-4 bg-card shadow-sm overflow-hidden">
     {notes.map(({ id, title, contentText, summary, createdAt, updatedAt, isPinned, attachmentCount, tags }) => (
       <NoteListItem
         key={id}
@@ -113,14 +113,14 @@ const NotesArea = ({ notes, onDelete, onPin, viewMode, hasFilters }: {
   if (notes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center min-h-[400px]">
-        <div className="rounded-full bg-muted p-6 mb-4">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-5">
           {hasFilters ? (
-            <Filter size={48} className="text-muted-foreground" />
+            <Filter size={28} />
           ) : (
-            <PlusSquareIcon size={48} className="text-muted-foreground" />
+            <PlusSquareIcon size={28} />
           )}
-        </div>
-        <h3 className="text-xl font-semibold mb-2">
+        </span>
+        <h3 className="text-xl font-semibold mb-1.5">
           {hasFilters ? "No matching notes" : "No notes yet"}
         </h3>
         <p className="text-muted-foreground max-w-sm">
@@ -442,12 +442,14 @@ export default function NotesPage() {
                           onCheckedChange={() => handleFilterTagToggle(tag.name)}
                         />
                         <span
-                          className="flex-1 text-sm truncate"
-                          style={tag.color ? { color: tag.color } : undefined}
-                        >
+                          className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+                          style={{ backgroundColor: tag.color || "var(--muted-foreground)" }}
+                          aria-hidden="true"
+                        />
+                        <span className="flex-1 text-sm truncate">
                           {tag.name}
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground tabular-nums">
                           {tag.count}
                         </span>
                       </label>

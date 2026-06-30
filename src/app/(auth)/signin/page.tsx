@@ -110,103 +110,109 @@ export default function SignInPage() {
   // so this component only ever renders for unauthenticated visitors. We render
   // the form immediately rather than gating it behind a client session check.
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Sign In</CardTitle>
-        </CardHeader>
+    <Card className="w-full max-w-md shadow-lg">
+      <CardHeader className="space-y-1 text-center">
+        <CardTitle className="text-2xl font-bold tracking-tight">
+          Welcome back
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Sign in to your vault to continue
+        </p>
+      </CardHeader>
 
-        <CardContent>
-          {authError && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{authError}</AlertDescription>
-            </Alert>
-          )}
+      <CardContent>
+        {authError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{authError}</AlertDescription>
+          </Alert>
+        )}
 
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(handleSignIn)}
-              className="space-y-4"
-              noValidate
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(handleSignIn)}
+            className="space-y-4"
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      disabled={isLoading}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <PasswordInput
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      disabled={isLoading}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              disabled={isLoading}
             >
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="you@example.com"
-                        autoComplete="email"
-                        disabled={isLoading}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {isLoading ? (
+                <>
+                  <Spinner className="mr-2" />
+                  Signing In...
+                </>
+              ) : (
+                "Sign In"
+              )}
+            </Button>
+          </form>
+        </Form>
 
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <PasswordInput
-                        placeholder="••••••••"
-                        autoComplete="current-password"
-                        disabled={isLoading}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <Button
-                type="submit"
-                className="w-full"
-                size="lg"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Spinner className="mr-2" />
-                    Signing In...
-                  </>
-                ) : (
-                  "Sign In"
-                )}
-              </Button>
-            </form>
-          </Form>
-
-          <div className="relative my-6">
-            <Separator />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="bg-background px-2 text-xs text-muted-foreground">
-                Or continue with
-              </span>
-            </div>
+        <div className="relative my-6">
+          <Separator />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="bg-card px-2 text-xs text-muted-foreground">
+              Or continue with
+            </span>
           </div>
+        </div>
 
-          <ContinueWithGoogle callbackURL={callbackUrl} />
-        </CardContent>
+        <ContinueWithGoogle callbackURL={callbackUrl} />
+      </CardContent>
 
-        <CardFooter className="flex flex-col gap-2">
-          <p className="text-sm text-center text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-primary hover:underline">
-              Sign up
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
-    </div>
+      <CardFooter className="flex flex-col gap-2">
+        <p className="text-sm text-center text-muted-foreground">
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/signup"
+            className="font-medium text-primary hover:underline"
+          >
+            Sign up
+          </Link>
+        </p>
+      </CardFooter>
+    </Card>
   );
 }

@@ -76,17 +76,19 @@ interface SettingsGroupProps {
 }
 
 /**
- * Group of related settings items
+ * Group of related settings items, presented as a card surface.
  */
 export function SettingsGroup({ title, children }: SettingsGroupProps) {
     return (
-        <div className="space-y-4">
+        <div className="space-y-3">
             {title && (
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     {title}
                 </h3>
             )}
-            <div className="space-y-4">{children}</div>
+            <div className="space-y-4 rounded-xl border bg-card p-4 shadow-xs sm:p-5">
+                {children}
+            </div>
         </div>
     );
 }

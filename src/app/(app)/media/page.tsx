@@ -217,9 +217,12 @@ export default function MediaPage() {
             <div className="container mx-auto py-6 px-4">
             {/* Header */}
             <div className="flex flex-col gap-4 mb-6">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <h1 className="text-2xl font-bold">Media Library</h1>
+                <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-1">
+                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Media Library</h1>
+                        <p className="text-sm text-muted-foreground">
+                            Images, video, audio and documents from across your vault.
+                        </p>
                     </div>
                     <div className="flex items-center gap-2">
                         <input
@@ -307,31 +310,42 @@ export default function MediaPage() {
 
             {/* Error state */}
             {error && (
-                <div className="rounded-lg border border-destructive bg-destructive/10 p-4 mb-6">
-                    <p className="text-destructive">{error}</p>
+                <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 mb-6">
+                    <p className="text-sm font-medium text-destructive">{error}</p>
                 </div>
             )}
 
             {/* Loading state */}
             {isLoading && media.length === 0 && (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                    {Array.from({ length: 12 }).map((_, i) => (
+                        <div key={i} className="rounded-xl border bg-card overflow-hidden">
+                            <div className="aspect-square animate-pulse bg-muted" />
+                            <div className="p-3 space-y-2">
+                                <div className="h-3.5 w-3/4 animate-pulse rounded bg-muted" />
+                                <div className="h-3 w-1/3 animate-pulse rounded bg-muted" />
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
 
             {/* Empty state */}
             {!isLoading && media.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                    <FolderOpen className="h-16 w-16 mb-4" />
-                    <p className="text-lg font-medium">No media files</p>
-                    <p className="text-sm">
-                        {fileType
-                            ? `No ${fileType.toLowerCase()} files found`
-                            : "Upload media here or add it from within your notes"}
-                    </p>
+                <div className="flex flex-col items-center justify-center gap-5 rounded-xl border border-dashed py-16 text-center">
+                    <span className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <FolderOpen className="size-7" />
+                    </span>
+                    <div className="max-w-md space-y-1.5">
+                        <p className="text-lg font-semibold">No media files</p>
+                        <p className="text-sm text-muted-foreground">
+                            {fileType
+                                ? `No ${fileType.toLowerCase()} files found. Try a different filter.`
+                                : "Upload media here, or add it from within your notes — it'll all show up in one place."}
+                        </p>
+                    </div>
                     {!fileType && (
                         <Button
-                            className="mt-4"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isUploading}
                         >

@@ -19,6 +19,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 import type { FontSizeOption, DisplayDensityOption } from "@/types/settings";
 
 export function AppearanceSettings() {
@@ -164,19 +165,20 @@ function ThemeCard({ label, icon, isActive, onClick }: ThemeCardProps) {
     return (
         <button
             onClick={onClick}
-            className={`
-        flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
-        ${isActive
-                    ? "border-primary bg-primary/5"
-                    : "border-muted hover:border-muted-foreground/30 hover:bg-muted/50"
-                }
-      `}
+            aria-pressed={isActive}
+            className={cn(
+                "flex flex-col items-center gap-2 p-4 rounded-xl border transition-all",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                isActive
+                    ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/30"
+                    : "hover:border-ring/40 hover:bg-accent/40 hover:-translate-y-0.5 hover:shadow-sm"
+            )}
         >
             <div
-                className={`
-        p-3 rounded-full
-        ${isActive ? "bg-primary text-primary-foreground" : "bg-muted"}
-      `}
+                className={cn(
+                    "flex size-11 items-center justify-center rounded-xl transition-colors",
+                    isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                )}
             >
                 {icon}
             </div>

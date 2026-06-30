@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +20,6 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
-import { getTextColorForBackground } from "@/lib/utils/tagColors";
 import {
     Dialog,
     DialogContent,
@@ -115,8 +113,14 @@ export function TagInspector({
 
     if (!tag) {
         return (
-            <div className="h-full flex items-center justify-center text-muted-foreground">
-                <p>Select a tag to view details</p>
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-muted-foreground">
+                <span className="flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground/70">
+                    <TagIcon className="size-7" />
+                </span>
+                <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">No tag selected</p>
+                    <p className="text-sm">Select a tag from the list to view and edit its details.</p>
+                </div>
             </div>
         );
     }
@@ -208,16 +212,16 @@ export function TagInspector({
                     <p className="text-sm text-muted-foreground mt-1">/{tag.slug}</p>
                 </div>
 
-                <Badge
-                    variant="secondary"
-                    className="text-base px-4 py-2"
-                    style={{
-                        backgroundColor: tag.color || undefined,
-                        color: tag.color ? getTextColorForBackground(tag.color) : undefined,
-                    }}
+                <span
+                    className="flex shrink-0 items-center gap-2 rounded-full border bg-card px-3 py-1.5 text-sm font-medium shadow-xs"
                 >
+                    <span
+                        className="size-3 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+                        style={{ backgroundColor: tag.color || "var(--muted-foreground)" }}
+                        aria-hidden="true"
+                    />
                     {tag.name}
-                </Badge>
+                </span>
             </div>
 
             {/* Description */}
@@ -318,18 +322,18 @@ export function TagInspector({
                         <CardContent>
                             <div className="flex flex-wrap gap-2">
                                 {relatedTags.map(({ tag: relatedTag, strength }) => (
-                                    <Badge
+                                    <span
                                         key={relatedTag.id}
-                                        variant="outline"
-                                        className="cursor-pointer hover:bg-accent"
-                                        style={{
-                                            borderColor: relatedTag.color || undefined,
-                                            color: relatedTag.color || undefined,
-                                        }}
+                                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border bg-card py-1 pl-2 pr-2.5 text-sm font-medium shadow-xs transition-all hover:-translate-y-0.5 hover:border-ring/40 hover:shadow-sm"
                                     >
-                                        {relatedTag.name}
-                                        <span className="ml-1 text-xs text-muted-foreground">({strength})</span>
-                                    </Badge>
+                                        <span
+                                            className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+                                            style={{ backgroundColor: relatedTag.color || "var(--muted-foreground)" }}
+                                            aria-hidden="true"
+                                        />
+                                        <span className="truncate">{relatedTag.name}</span>
+                                        <span className="text-xs text-muted-foreground tabular-nums">({strength})</span>
+                                    </span>
                                 ))}
                             </div>
                         </CardContent>

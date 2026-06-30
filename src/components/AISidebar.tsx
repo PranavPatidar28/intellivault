@@ -94,7 +94,7 @@ function SummaryContent({ content, isStreaming }: SummaryContentProps) {
                 title="Copy summary"
             >
                 {copied ? (
-                    <Check size={12} className="text-green-500" />
+                    <Check size={12} className="text-success" />
                 ) : (
                     <Copy size={12} className="text-muted-foreground" />
                 )}
@@ -248,7 +248,7 @@ export function AISidebar({
                             size="sm"
                             onClick={handleGenerateSummary}
                             disabled={isLoading}
-                            className="h-6 text-[10px] px-2"
+                            className="h-6 text-xs px-2"
                         >
                             {isSummarizing ? (
                                 <Loader2 size={10} className="mr-1 animate-spin" />
@@ -262,7 +262,7 @@ export function AISidebar({
                     {/* Settings */}
                     <div className="flex gap-2">
                         <Select value={summaryLength} onValueChange={(v) => setSummaryLength(v as SummaryLength)}>
-                            <SelectTrigger className="h-7 text-[10px] flex-1">
+                            <SelectTrigger className="h-7 text-xs flex-1">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -272,7 +272,7 @@ export function AISidebar({
                             </SelectContent>
                         </Select>
                         <Select value={summaryStyle} onValueChange={(v) => setSummaryStyle(v as SummaryStyle)}>
-                            <SelectTrigger className="h-7 text-[10px] flex-1">
+                            <SelectTrigger className="h-7 text-xs flex-1">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -290,7 +290,7 @@ export function AISidebar({
                             checked={includeImages}
                             onCheckedChange={(checked) => setIncludeImages(checked === true)}
                         />
-                        <Label htmlFor="include-images" className="text-[10px] text-muted-foreground cursor-pointer">
+                        <Label htmlFor="include-images" className="text-xs text-muted-foreground cursor-pointer">
                             Include images (uses vision AI)
                         </Label>
                     </div>
@@ -319,7 +319,7 @@ export function AISidebar({
 
                     {!summary && !isSummarizing && (
                         <div className="text-center py-4 bg-muted/20 rounded-lg border-dashed border">
-                            <p className="text-[10px] text-muted-foreground">Click Generate</p>
+                            <p className="text-xs text-muted-foreground">Click Generate</p>
                         </div>
                     )}
                 </section>
@@ -339,7 +339,7 @@ export function AISidebar({
                                     size="sm"
                                     variant="ghost"
                                     onClick={handleApplyTitle}
-                                    className="h-6 text-[10px] px-2 text-primary shrink-0"
+                                    className="h-6 text-xs px-2 text-primary shrink-0"
                                 >
                                     <Check size={10} className="mr-1" />
                                     Apply
@@ -365,7 +365,7 @@ export function AISidebar({
                                 findRelated(noteId, content);
                             }}
                             disabled={isFindingRelated}
-                            className="h-6 text-[10px] px-2"
+                            className="h-6 text-xs px-2"
                         >
                             {isFindingRelated ? (
                                 <Loader2 size={10} className="mr-1 animate-spin" />
@@ -391,7 +391,7 @@ export function AISidebar({
                                     className="block p-2 rounded-lg border bg-background hover:bg-muted/50 transition-colors"
                                 >
                                     <div className="font-medium text-xs truncate">{note.title}</div>
-                                    <div className="text-[10px] text-muted-foreground line-clamp-2 mt-1">
+                                    <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
                                         {note.preview}
                                     </div>
                                 </a>
@@ -401,7 +401,7 @@ export function AISidebar({
 
                     {!isFindingRelated && relatedNotes.length === 0 && (
                         <div className="text-center py-4 bg-muted/20 rounded-lg border-dashed border">
-                            <p className="text-[10px] text-muted-foreground">Click Find to see related notes</p>
+                            <p className="text-xs text-muted-foreground">Click Find to see related notes</p>
                         </div>
                     )}
                 </section>
@@ -420,7 +420,7 @@ export function AISidebar({
                             size="sm"
                             onClick={handleSuggestTags}
                             disabled={isLoading}
-                            className="h-6 text-[10px] px-2"
+                            className="h-6 text-xs px-2"
                         >
                             {isSuggestingTags ? (
                                 <Loader2 size={10} className="mr-1 animate-spin" />
@@ -447,7 +447,7 @@ export function AISidebar({
                                     variant="ghost"
                                     size="sm"
                                     onClick={handleApplyAllTags}
-                                    className="h-5 text-[10px] px-2 text-primary"
+                                    className="h-5 text-xs px-2 text-primary"
                                 >
                                     <Check size={8} className="mr-1" />
                                     Apply All
@@ -461,22 +461,22 @@ export function AISidebar({
                                     >
                                         <div className="flex items-center gap-1.5">
                                             <span className="text-xs font-medium">{suggestion.name}</span>
-                                            <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">
+                                            <Badge variant="secondary" className="text-xs px-1 py-0 h-3.5">
                                                 {Math.round(suggestion.confidence * 100)}%
                                             </Badge>
                                         </div>
                                         <div className="flex items-center gap-0.5">
                                             <button
                                                 onClick={() => handleApplyTag(suggestion.name)}
-                                                className="p-1 hover:bg-green-500/20 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                className="p-1 hover:bg-success/15 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                                 aria-label={`Apply tag ${suggestion.name}`}
                                                 title="Apply"
                                             >
-                                                <Check size={12} className="text-green-600" />
+                                                <Check size={12} className="text-success" />
                                             </button>
                                             <button
                                                 onClick={() => handleDismissTag(suggestion.name)}
-                                                className="p-1 hover:bg-red-500/20 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                className="p-1 hover:bg-destructive/15 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                                 aria-label={`Dismiss tag ${suggestion.name}`}
                                                 title="Dismiss"
                                             >
@@ -491,7 +491,7 @@ export function AISidebar({
 
                     {suggestions.length === 0 && !isSuggestingTags && (
                         <div className="text-center py-4 bg-muted/20 rounded-lg border-dashed border">
-                            <p className="text-[10px] text-muted-foreground">Click Suggest</p>
+                            <p className="text-xs text-muted-foreground">Click Suggest</p>
                         </div>
                     )}
                 </section>

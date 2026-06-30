@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Inbox, Settings, FolderOpen, Sparkles, Tag } from "lucide-react";
+import { Home, Inbox, Settings, FolderOpen, Sparkles, Tag, Vault } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -67,9 +67,19 @@ export function AppSidebar({ session }: AppSidebarProps) {
 
   return (
     <Sidebar collapsible="icon">
-      <div className="h-12 flex justify-between items-center overflow-clip">
+      <div className="flex h-12 items-center justify-between overflow-clip">
         {sidebarContext.open ? (
-          <span className="text-2xl font-semibold m-3">IntelliVault</span>
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 px-3 py-2 group/brand"
+          >
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm transition-transform group-hover/brand:scale-105">
+              <Vault className="size-4" />
+            </span>
+            <span className="text-lg font-semibold tracking-tight">
+              IntelliVault
+            </span>
+          </Link>
         ) : null}
         <SidebarTrigger className="m-2.5" />
       </div>
