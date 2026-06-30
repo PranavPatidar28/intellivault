@@ -80,6 +80,13 @@ export default function TagsPage() {
 
     const tagOperations = useTagOperations();
 
+    // Tracks the most recently requested tag-detail fetch. Because detail
+    // requests are async and can resolve out of order (a heavy tag embeds more
+    // notes and returns slower), a stale response must never be allowed to
+    // overwrite a newer selection — otherwise clicking A then B can "open" A
+    // when A's response lands last. We gate the state writes on this token.
+    const latestDetailReq = useRef<string | null>(null);
+
     // Fetch tags - fetch all (limit 1000) for client-side filtering
     const fetchTags = async () => {
         try {
@@ -111,9 +118,15 @@ export default function TagsPage() {
 
     // Fetch tag details and notes
     const fetchTagDetails = async (tagId: string) => {
+        // Mark this as the latest detail request before awaiting.
+        latestDetailReq.current = tagId;
         try {
             const response = await fetch(`/api/tags/${tagId}`);
             const data = await response.json();
+
+            // Drop a response that a newer selection has already superseded, so
+            // an out-of-order/slow response can't open the wrong tag's notes.
+            if (latestDetailReq.current !== tagId) return;
 
             if (data.success) {
                 setTopNotes(data.tag.notes.map((n: any) => ({
@@ -129,7 +142,10 @@ export default function TagsPage() {
                     createdAt: new Date(data.tag.createdAt),
                     deletedAt: data.tag.deletedAt ? new Date(data.tag.deletedAt) : null,
                 };
-                setSelectedTag(updatedTag);
+                // Enrich ONLY the tag that is still selected — never switch the
+                // selection to this response's tag, and never resurrect a tag
+                // that was cleared/deleted while the request was in flight.
+                setSelectedTag(prev => prev?.id === tagId ? { ...prev, ...updatedTag } : prev);
             }
         } catch (error) {
             console.error("Failed to fetch tag details:", error);
@@ -330,6 +346,8 @@ export default function TagsPage() {
 
         const success = await tagOperations.deleteTag(selectedTag.id);
         if (success) {
+            // Cancel any in-flight detail fetch so it can't resurrect the tag.
+            latestDetailReq.current = null;
             setSelectedTag(null);
             await fetchTags();
         }
