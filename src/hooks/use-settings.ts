@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
-import type { UserPreferences, UserPreferencesUpdate, DEFAULT_PREFERENCES } from "@/types/settings";
+import { usePreferences } from "@/components/PreferencesProvider";
+import type { UserPreferences, UserPreferencesUpdate } from "@/types/settings";
 
 interface UseSettingsReturn {
     preferences: UserPreferences | null;
@@ -13,85 +14,55 @@ interface UseSettingsReturn {
 }
 
 /**
- * Hook for managing user preferences/settings
+ * Hook for managing user preferences/settings.
+ *
+ * Reads and writes go through the global PreferencesProvider so every consumer
+ * (settings panels, notes/tags pages) shares ONE preference store. Previously
+ * this hook kept its own useState + GET + PATCH, which drifted out of sync with
+ * the provider: a change made in Settings did not reach /notes until a full
+ * reload, and switching settings tabs refetched + re-skeletoned each panel.
+ * Now there are no extra fetches (the provider fetches once at app level) and a
+ * write is reflected everywhere immediately.
+ *
+ * The provider's writer reports its outcome directly (true on success, false
+ * after rollback) and owns the failure toast. We layer the success toast on
+ * top, so each write produces exactly one toast.
  */
 export function useSettings(): UseSettingsReturn {
-    const [preferences, setPreferences] = useState<UserPreferences | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { preferences, isLoading, updatePreferences: ctxUpdatePreferences } =
+        usePreferences();
     const { toast } = useToast();
+    const [error, setError] = useState<string | null>(null);
 
-    const fetchPreferences = useCallback(async () => {
-        try {
-            setIsLoading(true);
+    const updatePreferences = useCallback(
+        async (updates: UserPreferencesUpdate) => {
             setError(null);
+            const succeeded = await ctxUpdatePreferences(updates);
 
-            const response = await fetch("/api/user/preferences");
-
-            if (!response.ok) {
-                throw new Error("Failed to fetch preferences");
+            if (succeeded) {
+                toast({
+                    title: "Settings saved",
+                    description: "Your preferences have been updated.",
+                });
+            } else {
+                // The provider already surfaced a destructive error toast and
+                // rolled the store back; just record the error locally.
+                setError("Failed to save settings");
             }
+        },
+        [ctxUpdatePreferences, toast]
+    );
 
-            const data = await response.json();
-            setPreferences(data);
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to load settings";
-            setError(message);
-            console.error("Error fetching preferences:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    const updatePreferences = useCallback(async (updates: UserPreferencesUpdate) => {
-        // Optimistic update
-        const previousPreferences = preferences;
-        if (preferences) {
-            setPreferences({ ...preferences, ...updates, updatedAt: new Date() });
-        }
-
-        try {
-            const response = await fetch("/api/user/preferences", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(updates),
-            });
-
-            if (!response.ok) {
-                throw new Error("Failed to update preferences");
-            }
-
-            const data = await response.json();
-            setPreferences(data);
-
-            toast({
-                title: "Settings saved",
-                description: "Your preferences have been updated.",
-            });
-        } catch (err) {
-            // Rollback on error
-            setPreferences(previousPreferences);
-
-            const message = err instanceof Error ? err.message : "Failed to save settings";
-            toast({
-                title: "Error",
-                description: message,
-                variant: "destructive",
-            });
-            console.error("Error updating preferences:", err);
-        }
-    }, [preferences, toast]);
-
-    useEffect(() => {
-        fetchPreferences();
-    }, [fetchPreferences]);
+    // Preferences are fetched once at the provider level; there is nothing to
+    // refetch per-panel. Kept for API compatibility with existing callers.
+    const refetch = useCallback(async () => {}, []);
 
     return {
         preferences,
         isLoading,
         error,
         updatePreferences,
-        refetch: fetchPreferences,
+        refetch,
     };
 }
 

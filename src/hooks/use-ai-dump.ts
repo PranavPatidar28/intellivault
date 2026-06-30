@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type {
     AIDumpOptions,
@@ -70,6 +70,12 @@ interface UseAIDumpReturn {
     // State
     aiDump: AIDumpData | null;
     isProcessing: boolean;
+    /**
+     * True only while a generation stream (create/regenerate) is actively
+     * producing content. Distinct from isProcessing, which is also true during
+     * finalize/loadDraft where there is no streaming.
+     */
+    isGenerating: boolean;
     isRegenerating: Record<SectionType, boolean>;
     error: string | null;
     streamingStatus: string | null;
@@ -94,6 +100,9 @@ interface UseAIDumpReturn {
     loadDraft: (noteId: string) => Promise<boolean>;
     deleteDraft: (noteId: string) => Promise<boolean>;
     listDrafts: () => Promise<DraftSummary[]>;
+
+    /** Abort an in-flight generation/finalize stream. */
+    cancel: () => void;
 
     // Selection handlers
     setSelectedTitle: (title: string) => void;
@@ -131,6 +140,7 @@ export function useAIDump(): UseAIDumpReturn {
     // State
     const [aiDump, setAIDump] = useState<AIDumpData | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [isRegenerating, setIsRegenerating] = useState<
         Record<SectionType, boolean>
     >({
@@ -145,6 +155,31 @@ export function useAIDump(): UseAIDumpReturn {
     const [streamingStatus, setStreamingStatus] = useState<string | null>(null);
     const [warning, setWarning] = useState<string | null>(null);
 
+    // Tracks the in-flight create/generation stream so it can be aborted on
+    // cancel/unmount.
+    const createAbortRef = useRef<AbortController | null>(null);
+    // Tracks in-flight regenerations keyed by section, so independent
+    // regenerations don't cancel each other (e.g. regenerating Titles must not
+    // be aborted when the user then regenerates Tags).
+    const regenAbortRefs = useRef<Map<SectionType, AbortController>>(new Map());
+
+    /** Abort the in-flight create/generation stream. */
+    const cancel = useCallback(() => {
+        createAbortRef.current?.abort();
+        createAbortRef.current = null;
+    }, []);
+
+    // Abort any in-flight requests when the consumer unmounts.
+    useEffect(() => {
+        const regens = regenAbortRefs.current;
+        return () => {
+            createAbortRef.current?.abort();
+            createAbortRef.current = null;
+            regens.forEach((c) => c.abort());
+            regens.clear();
+        };
+    }, []);
+
     /**
      * Create a new AI Dump from content with streaming
      */
@@ -154,7 +189,12 @@ export function useAIDump(): UseAIDumpReturn {
             options?: Partial<AIDumpOptions>,
             extras?: CreateAIDumpExtras
         ): Promise<boolean> => {
+            // Abort any prior in-flight create stream before starting a new one.
+            createAbortRef.current?.abort();
+            const controller = new AbortController();
+            createAbortRef.current = controller;
             setIsProcessing(true);
+            setIsGenerating(true);
             setError(null);
             setWarning(null);
             setStreamingStatus("Connecting...");
@@ -179,6 +219,7 @@ export function useAIDump(): UseAIDumpReturn {
                         imageData: extras?.imageData,
                         options: { ...DEFAULT_OPTIONS, ...options },
                     }),
+                    signal: controller.signal,
                 });
 
                 if (!response.ok) {
@@ -306,6 +347,15 @@ export function useAIDump(): UseAIDumpReturn {
 
                 return true;
             } catch (err) {
+                // A user-initiated cancel (or unmount) aborts the fetch/reader.
+                // Treat it as a quiet, non-error stop rather than a failure.
+                if (
+                    (err instanceof DOMException && err.name === "AbortError") ||
+                    controller.signal.aborted
+                ) {
+                    setStreamingStatus(null);
+                    return false;
+                }
                 const message =
                     err instanceof Error ? err.message : "An error occurred";
                 setError(message);
@@ -317,7 +367,11 @@ export function useAIDump(): UseAIDumpReturn {
                 });
                 return false;
             } finally {
+                if (createAbortRef.current === controller) {
+                    createAbortRef.current = null;
+                }
                 setIsProcessing(false);
+                setIsGenerating(false);
                 setStreamingStatus(null);
             }
         },
@@ -353,6 +407,13 @@ export function useAIDump(): UseAIDumpReturn {
 
             const { instruction, ...regenOptions } = options ?? {};
 
+            // Abort only a prior in-flight regeneration of THIS same section
+            // before starting a new one. Regenerations of other sections (and
+            // the create stream) are tracked separately, so they keep running.
+            regenAbortRefs.current.get(section)?.abort();
+            const controller = new AbortController();
+            regenAbortRefs.current.set(section, controller);
+
             try {
                 const response = await fetch(
                     `/api/ai-dump/${aiDump.noteId}/regenerate`,
@@ -364,6 +425,7 @@ export function useAIDump(): UseAIDumpReturn {
                             instruction,
                             options: regenOptions,
                         }),
+                        signal: controller.signal,
                     }
                 );
 
@@ -408,6 +470,12 @@ export function useAIDump(): UseAIDumpReturn {
 
                 return true;
             } catch (err) {
+                if (
+                    (err instanceof DOMException && err.name === "AbortError") ||
+                    controller.signal.aborted
+                ) {
+                    return false;
+                }
                 const message =
                     err instanceof Error ? err.message : "An error occurred";
                 setError(message);
@@ -418,6 +486,9 @@ export function useAIDump(): UseAIDumpReturn {
                 });
                 return false;
             } finally {
+                if (regenAbortRefs.current.get(section) === controller) {
+                    regenAbortRefs.current.delete(section);
+                }
                 setIsRegenerating((prev) => ({ ...prev, [section]: false }));
             }
         },
@@ -625,8 +696,14 @@ export function useAIDump(): UseAIDumpReturn {
      * Reset all state
      */
     const reset = useCallback(() => {
+        // Stop any in-flight create stream and all regenerations first.
+        createAbortRef.current?.abort();
+        createAbortRef.current = null;
+        regenAbortRefs.current.forEach((c) => c.abort());
+        regenAbortRefs.current.clear();
         setAIDump(null);
         setIsProcessing(false);
+        setIsGenerating(false);
         setIsRegenerating({
             titles: false,
             tags: false,
@@ -635,6 +712,7 @@ export function useAIDump(): UseAIDumpReturn {
         });
         setError(null);
         setWarning(null);
+        setStreamingStatus(null);
         setSelectedTitle("");
         setSelectedTags([]);
     }, []);
@@ -642,6 +720,7 @@ export function useAIDump(): UseAIDumpReturn {
     return {
         aiDump,
         isProcessing,
+        isGenerating,
         isRegenerating,
         error,
         streamingStatus,
@@ -654,6 +733,7 @@ export function useAIDump(): UseAIDumpReturn {
         loadDraft,
         deleteDraft,
         listDrafts,
+        cancel,
         setSelectedTitle,
         toggleTag,
         setSelectedTags,

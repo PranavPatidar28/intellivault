@@ -157,7 +157,7 @@ function DiffPreview({ raw, generated }: DiffPreviewProps) {
     const generatedLines = generated.split("\n");
 
     return (
-        <div className="p-6 grid grid-cols-2 gap-4">
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
                 <h3 className="text-sm font-medium mb-2 text-muted-foreground">
                     Original

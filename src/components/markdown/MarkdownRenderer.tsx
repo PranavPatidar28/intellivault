@@ -25,7 +25,8 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "@/lib/utils";
 import { Check, Copy, ExternalLink } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { toast } from "sonner";
 
 // ============================================================================
 // Types
@@ -86,17 +87,29 @@ function stripMarkdownCodeFences(content: string, isStreaming: boolean = false):
 }
 
 /**
- * Detect if user has dark mode enabled
+ * Detect if user has dark mode enabled, reacting to live theme changes.
+ *
+ * Returns undefined until mounted so server and first client render agree
+ * (avoids a hydration mismatch / flash), then tracks the `dark` class on
+ * <html> via a MutationObserver so code-block themes follow theme toggles.
  */
-function useTheme(themeOverride: "auto" | "dark" | "light"): "dark" | "light" {
-    // For SSR safety, default to light
-    if (typeof window === "undefined") return "light";
+function useTheme(themeOverride: "auto" | "dark" | "light"): "dark" | "light" | undefined {
+    const [systemTheme, setSystemTheme] = useState<"dark" | "light" | undefined>(undefined);
+
+    useEffect(() => {
+        if (themeOverride !== "auto") return;
+
+        const root = document.documentElement;
+        const read = () => setSystemTheme(root.classList.contains("dark") ? "dark" : "light");
+
+        read();
+        const observer = new MutationObserver(read);
+        observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+        return () => observer.disconnect();
+    }, [themeOverride]);
 
     if (themeOverride !== "auto") return themeOverride;
-
-    // Check document class for dark mode
-    const isDark = document.documentElement.classList.contains("dark");
-    return isDark ? "dark" : "light";
+    return systemTheme;
 }
 
 // ============================================================================
@@ -106,7 +119,7 @@ function useTheme(themeOverride: "auto" | "dark" | "light"): "dark" | "light" {
 interface CodeBlockProps {
     language: string | undefined;
     children: string;
-    theme: "dark" | "light";
+    theme: "dark" | "light" | undefined;
     enableCopy: boolean;
 }
 
@@ -114,11 +127,17 @@ function CodeBlock({ language, children, theme, enableCopy }: CodeBlockProps) {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = useCallback(async () => {
-        await navigator.clipboard.writeText(children);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        try {
+            await navigator.clipboard.writeText(children);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            toast.error("Couldn't copy to clipboard");
+        }
     }, [children]);
 
+    // Default to the light theme until the client resolves the active theme,
+    // matching SSR and avoiding a flash of the wrong syntax palette.
     const codeStyle = theme === "dark" ? oneDark : oneLight;
 
     return (

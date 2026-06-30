@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -22,6 +23,7 @@ import {
 } from "./tiptap-templates/simple/simple-editor";
 import { TagInput } from "./TagInput";
 import { cn } from "@/lib/utils";
+import type { JSONContent } from "@tiptap/core";
 
 const DRAFT_KEY = "intellivault_note_draft";
 const MAX_TITLE_LENGTH = 200;
@@ -29,7 +31,23 @@ const MAX_TITLE_LENGTH = 200;
 interface NoteDraft {
   title: string;
   tags: string[];
+  contentJSON?: JSONContent;
   savedAt: number;
+}
+
+// Read a recent (< 24h) draft from localStorage. Returns null on miss/parse error.
+function readDraft(): NoteDraft | null {
+  try {
+    const saved = localStorage.getItem(DRAFT_KEY);
+    if (!saved) return null;
+    const draft: NoteDraft = JSON.parse(saved);
+    if (Date.now() - draft.savedAt < 24 * 60 * 60 * 1000) {
+      return draft;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null;
 }
 
 interface NoteModalProps {
@@ -53,44 +71,57 @@ export default function AddNoteModal({
   const noteTitleRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<SimpleEditorRef>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Latest editor content, kept in a ref so draft save/close reads it without
+  // re-rendering on every keystroke.
+  const editorContentRef = useRef<JSONContent | undefined>(undefined);
+  // Captured once on first render so the editor can mount with the draft body.
+  const initialDraftRef = useRef<NoteDraft | null>(null);
+  if (initialDraftRef.current === null && typeof window !== "undefined") {
+    initialDraftRef.current = readDraft() ?? ({} as NoteDraft);
+  }
+  const initialContent = initialDraftRef.current?.contentJSON;
 
-  // Load draft on modal open
+  // Load draft (title + tags) on modal open
   useEffect(() => {
     if (isAddNoteModalOpen) {
-      try {
-        const savedDraft = localStorage.getItem(DRAFT_KEY);
-        if (savedDraft) {
-          const draft: NoteDraft = JSON.parse(savedDraft);
-          // Only restore if saved within last 24 hours
-          if (Date.now() - draft.savedAt < 24 * 60 * 60 * 1000) {
-            if (noteTitleRef.current && draft.title) {
-              noteTitleRef.current.value = draft.title;
-              setTitleLength(draft.title.length);
-            }
-            if (draft.tags) {
-              setTags(draft.tags);
-            }
-          }
+      const draft = readDraft();
+      if (draft) {
+        if (noteTitleRef.current && draft.title) {
+          noteTitleRef.current.value = draft.title;
+          setTitleLength(draft.title.length);
         }
-      } catch {
-        // Ignore parse errors
+        if (draft.tags) {
+          setTags(draft.tags);
+        }
       }
       setTimeout(() => noteTitleRef.current?.focus(), 100);
     }
   }, [isAddNoteModalOpen]);
+
+  // Build a draft snapshot from current title/tags/editor content.
+  const buildDraft = useCallback((): NoteDraft => {
+    const title = noteTitleRef.current?.value || "";
+    return {
+      title,
+      tags,
+      contentJSON: editorRef.current?.getJSON() ?? editorContentRef.current,
+      savedAt: Date.now(),
+    };
+  }, [tags]);
+
+  const hasDraftContent = useCallback((draft: NoteDraft): boolean => {
+    if (draft.title || draft.tags.length > 0) return true;
+    const content = draft.contentJSON?.content;
+    return Array.isArray(content) && content.length > 0;
+  }, []);
 
   // Auto-save draft every 30 seconds
   useEffect(() => {
     if (!isAddNoteModalOpen) return;
 
     const saveDraft = () => {
-      const title = noteTitleRef.current?.value || "";
-      if (title || tags.length > 0) {
-        const draft: NoteDraft = {
-          title,
-          tags,
-          savedAt: Date.now(),
-        };
+      const draft = buildDraft();
+      if (hasDraftContent(draft)) {
         localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
       }
     };
@@ -101,7 +132,7 @@ export default function AddNoteModal({
         clearInterval(autoSaveTimerRef.current);
       }
     };
-  }, [isAddNoteModalOpen, tags]);
+  }, [isAddNoteModalOpen, buildDraft, hasDraftContent]);
 
   // Track unsaved changes
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,6 +144,11 @@ export default function AddNoteModal({
     setTags(newTags);
     setHasUnsavedChanges(true);
   };
+
+  const handleEditorChange = useCallback((content: JSONContent) => {
+    editorContentRef.current = content;
+    setHasUnsavedChanges(true);
+  }, []);
 
   // Clear draft on successful save
   const clearDraft = () => {
@@ -206,10 +242,9 @@ export default function AddNoteModal({
   const handleOpenChange = (open: boolean) => {
     if (isSaving) return;
     if (!open && hasUnsavedChanges) {
-      // Save draft before closing
-      const title = noteTitleRef.current?.value || "";
-      if (title || tags.length > 0) {
-        const draft: NoteDraft = { title, tags, savedAt: Date.now() };
+      // Save the full draft (title, tags, and editor body) before closing.
+      const draft = buildDraft();
+      if (hasDraftContent(draft)) {
         localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
       }
     }
@@ -232,11 +267,15 @@ export default function AddNoteModal({
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1 min-w-0">
               <DialogTitle className="sr-only">New Note</DialogTitle>
+              <DialogDescription className="sr-only">
+                Create a new note with a title, tags, and rich text content.
+              </DialogDescription>
               <div className="space-y-1">
                 <input
                   ref={noteTitleRef}
                   className="w-full text-2xl font-bold bg-transparent border-none focus:outline-none placeholder:text-muted-foreground/40"
                   placeholder="Note Title"
+                  aria-label="Note title"
                   maxLength={MAX_TITLE_LENGTH}
                   disabled={isSaving}
                   onChange={handleTitleChange}
@@ -312,7 +351,11 @@ export default function AddNoteModal({
         <div className="flex-1 min-h-0 overflow-hidden relative bg-background">
           <div className="absolute inset-0 overflow-y-auto">
             <div className="h-full px-6 py-4">
-              <SimpleEditor ref={editorRef} />
+              <SimpleEditor
+                ref={editorRef}
+                initialContent={initialContent}
+                onChange={handleEditorChange}
+              />
             </div>
           </div>
         </div>

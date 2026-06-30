@@ -49,8 +49,6 @@ export default function SignInPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
-  const [isAlreadyAuthenticated, setIsAlreadyAuthenticated] = useState(false);
   // Where to send the user after login. Read from the ?callbackUrl= param the
   // middleware sets, sanitized to a same-origin path to prevent open redirects.
   const [callbackUrl, setCallbackUrl] = useState("/");
@@ -71,24 +69,15 @@ export default function SignInPage() {
     mode: "onChange", // Validate on change for better UX
   });
 
-  // Check if user is already authenticated on page load
+  // Clear a stale auth error as soon as the user edits any field, so the
+  // previous "sign in failed" message doesn't linger under fields they're
+  // actively correcting.
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const session = (await authClient.getSession()).data;
-        if (session) {
-          setIsAlreadyAuthenticated(true);
-        }
-      } catch (error) {
-        // If session check fails, assume not authenticated
-        console.error("Session check failed:", error);
-      } finally {
-        setIsCheckingSession(false);
-      }
-    };
-
-    checkSession();
-  }, []);
+    const subscription = form.watch(() => {
+      setAuthError((prev) => (prev ? null : prev));
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
 
   const handleSignIn = async (data: SignInForm) => {
     if (isLoading) return;
@@ -117,69 +106,9 @@ export default function SignInPage() {
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await authClient.signOut();
-      setIsAlreadyAuthenticated(false);
-      setAuthError(null);
-    } catch (error) {
-      console.error("Sign out error:", error);
-      setAuthError("Failed to sign out. Please try again.");
-    }
-  };
-
-  // Show loading spinner while checking session
-  if (isCheckingSession) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Spinner className="mx-auto mb-4" />
-          <p className="text-muted-foreground">Checking authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show message for already authenticated users
-  if (isAlreadyAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Already Signed In</CardTitle>
-          </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-muted-foreground mb-4">
-              You are already signed in to your account.
-            </p>
-            {authError && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{authError}</AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-          <CardFooter className="flex flex-col gap-2">
-            <Button
-              onClick={() => router.push(callbackUrl)}
-              className="w-full"
-              size="lg"
-            >
-              Go to Dashboard
-            </Button>
-            <Button
-              onClick={handleSignOut}
-              className="w-full"
-              size="lg"
-            >
-              Sign Out
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
-    );
-  }
-
-  // Main sign-in form
+  // Note: authenticated users are redirected away from /signin by middleware,
+  // so this component only ever renders for unauthenticated visitors. We render
+  // the form immediately rather than gating it behind a client session check.
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
@@ -243,7 +172,7 @@ export default function SignInPage() {
                 type="submit"
                 className="w-full"
                 size="lg"
-                disabled={isLoading || !form.formState.isValid}
+                disabled={isLoading}
               >
                 {isLoading ? (
                   <>
@@ -281,4 +210,3 @@ export default function SignInPage() {
     </div>
   );
 }
-

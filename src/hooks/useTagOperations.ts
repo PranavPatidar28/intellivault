@@ -1,11 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import type {
   Tag,
   TagWithStats,
   TagWithRelations,
   BulkOperationProgress,
-  UndoOperation,
 } from "@/types/tag";
 
 interface UseTagOperationsReturn {
@@ -13,7 +12,6 @@ interface UseTagOperationsReturn {
   isLoading: boolean;
   error: string | null;
   progress: BulkOperationProgress | null;
-  undoStack: UndoOperation[];
 
   // Single tag operations
   createTag: (name: string, color?: string, parentId?: string) => Promise<Tag | null>;
@@ -27,18 +25,28 @@ interface UseTagOperationsReturn {
   bulkRecolor: (tagIds: string[], color: string) => Promise<number>;
   bulkArchive: (tagIds: string[]) => Promise<number>;
   bulkFavorite: (tagIds: string[]) => Promise<number>;
-  mergeTags: (sourceIds: string[], targetId: string) => Promise<number>;
-
-  // Undo/Redo
-  undo: () => Promise<boolean>;
-  clearUndoStack: () => void;
+  mergeTags: (sourceIds: string[], targetId: string) => Promise<number | null>;
 }
 
 export function useTagOperations(): UseTagOperationsReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<BulkOperationProgress | null>(null);
-  const [undoStack, setUndoStack] = useState<UndoOperation[]>([]);
+
+  // Track the pending "auto-clear progress" timer so a second bulk operation
+  // started within the clear window can't have its fresh progress bar wiped by
+  // the previous operation's trailing timeout.
+  const progressClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleProgressClear = useCallback(() => {
+    if (progressClearTimer.current) {
+      clearTimeout(progressClearTimer.current);
+    }
+    progressClearTimer.current = setTimeout(() => {
+      setProgress(null);
+      progressClearTimer.current = null;
+    }, 3000);
+  }, []);
 
   const handleError = useCallback((err: unknown, fallbackMessage: string) => {
     const message = err instanceof Error ? err.message : fallbackMessage;
@@ -125,16 +133,6 @@ export function useTagOperations(): UseTagOperationsReturn {
           throw new Error(data.error || "Failed to delete tag");
         }
 
-        // Add to undo stack
-        setUndoStack((prev) => [
-          ...prev,
-          {
-            type: "delete",
-            data: { tagId: id },
-            timestamp: new Date(),
-          },
-        ]);
-
         toast.success("Tag deleted");
         return true;
       } catch (err) {
@@ -199,6 +197,10 @@ export function useTagOperations(): UseTagOperationsReturn {
     async (tagIds: string[]): Promise<number> => {
       setIsLoading(true);
       setError(null);
+      if (progressClearTimer.current) {
+        clearTimeout(progressClearTimer.current);
+        progressClearTimer.current = null;
+      }
       setProgress({
         total: tagIds.length,
         completed: 0,
@@ -229,16 +231,6 @@ export function useTagOperations(): UseTagOperationsReturn {
           status: "completed",
         });
 
-        // Add to undo stack
-        setUndoStack((prev) => [
-          ...prev,
-          {
-            type: "bulkDelete",
-            data: { tagIds },
-            timestamp: new Date(),
-          },
-        ]);
-
         toast.success("Tags deleted", {
           description: `Deleted ${data.deletedCount} tag(s)`,
         });
@@ -250,10 +242,10 @@ export function useTagOperations(): UseTagOperationsReturn {
         return 0;
       } finally {
         setIsLoading(false);
-        setTimeout(() => setProgress(null), 3000);
+        scheduleProgressClear();
       }
     },
-    [handleError]
+    [handleError, scheduleProgressClear]
   );
 
   const bulkRecolor = useCallback(
@@ -366,9 +358,13 @@ export function useTagOperations(): UseTagOperationsReturn {
   );
 
   const mergeTags = useCallback(
-    async (sourceIds: string[], targetId: string): Promise<number> => {
+    async (sourceIds: string[], targetId: string): Promise<number | null> => {
       setIsLoading(true);
       setError(null);
+      if (progressClearTimer.current) {
+        clearTimeout(progressClearTimer.current);
+        progressClearTimer.current = null;
+      }
       setProgress({
         total: sourceIds.length,
         completed: 0,
@@ -407,42 +403,25 @@ export function useTagOperations(): UseTagOperationsReturn {
       } catch (err) {
         setProgress((prev) => (prev ? { ...prev, status: "error" } : null));
         handleError(err, "Failed to merge tags");
-        return 0;
+        // Return null (not 0) so callers can distinguish a real failure from a
+        // genuine zero-note merge.
+        return null;
       } finally {
         setIsLoading(false);
-        setTimeout(() => setProgress(null), 3000);
+        scheduleProgressClear();
       }
     },
-    [handleError]
+    [handleError, scheduleProgressClear]
   );
 
   // ============================================================================
-  // Undo/Redo (Basic implementation)
+  // Return
   // ============================================================================
-
-  const undo = useCallback(async (): Promise<boolean> => {
-    if (undoStack.length === 0) {
-      toast.info("Nothing to undo");
-      return false;
-    }
-
-    const lastOperation = undoStack[undoStack.length - 1];
-    // Implementation would depend on operation type
-    // For now, just show a message
-    toast.info("Undo functionality coming soon");
-    setUndoStack((prev) => prev.slice(0, -1));
-    return true;
-  }, [undoStack]);
-
-  const clearUndoStack = useCallback(() => {
-    setUndoStack([]);
-  }, []);
 
   return {
     isLoading,
     error,
     progress,
-    undoStack,
     createTag,
     updateTag,
     deleteTag,
@@ -453,7 +432,5 @@ export function useTagOperations(): UseTagOperationsReturn {
     bulkArchive,
     bulkFavorite,
     mergeTags,
-    undo,
-    clearUndoStack,
   };
 }

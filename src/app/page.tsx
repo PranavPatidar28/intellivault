@@ -1,6 +1,25 @@
+import type { Metadata } from "next";
 import { getServerSession } from "@/lib/session";
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { LandingPage } from "@/components/landing/LandingPage";
+
+export const metadata: Metadata = {
+  title: "IntelliVault — Your second brain, intelligently organized",
+  description:
+    "The AI note vault that captures raw documents, PDFs and ideas, then structures, tags and connects them automatically — so you can find anything by meaning.",
+  openGraph: {
+    title: "IntelliVault — Your second brain, intelligently organized",
+    description:
+      "Capture anything. Find everything. AI-powered notes with smart tags, action items and semantic search.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "IntelliVault — Your second brain, intelligently organized",
+    description:
+      "Capture anything. Find everything. AI-powered notes with smart tags, action items and semantic search.",
+  },
+};
 
 export default async function Home() {
   const session = await getServerSession();
@@ -10,24 +29,5 @@ export default async function Home() {
     redirect("/dashboard");
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center py-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            IntelliVault
-          </h1>
-          <p className="text-xl text-gray-600 mb-8">
-            Your secure document vault with intelligent organization
-          </p>
-          <Link
-            href="/signin"
-            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Get Started
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
+  return <LandingPage />;
 }

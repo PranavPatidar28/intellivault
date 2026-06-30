@@ -9,6 +9,7 @@ import {
 } from "./SettingsLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
     Select,
     SelectContent,
@@ -131,14 +132,14 @@ export function AISettings() {
                 <SettingsItem
                     label="Auto-Summarize"
                     description="Automatically generate summaries for new notes"
+                    htmlFor="ai-auto-summarize"
                 >
                     <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        <Checkbox
+                            id="ai-auto-summarize"
                             checked={preferences?.aiAutoSummarize || false}
-                            onChange={(e) =>
-                                updatePreferences({ aiAutoSummarize: e.target.checked })
+                            onCheckedChange={(checked) =>
+                                updatePreferences({ aiAutoSummarize: checked === true })
                             }
                         />
                         {preferences?.aiAutoSummarize && (
@@ -152,14 +153,14 @@ export function AISettings() {
                 <SettingsItem
                     label="Auto-Tag"
                     description="Automatically suggest tags when creating notes"
+                    htmlFor="ai-auto-tag"
                 >
                     <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        <Checkbox
+                            id="ai-auto-tag"
                             checked={preferences?.aiAutoTag || false}
-                            onChange={(e) =>
-                                updatePreferences({ aiAutoTag: e.target.checked })
+                            onCheckedChange={(checked) =>
+                                updatePreferences({ aiAutoTag: checked === true })
                             }
                         />
                         {preferences?.aiAutoTag && (

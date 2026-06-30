@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,7 +18,10 @@ import {
   FormControl,
   FormMessage,
 } from "@/components/ui/form";
-import { PasswordInput } from "@/components/ui/password-input";
+import {
+  PasswordInput,
+  PasswordInputStrengthChecker,
+} from "@/components/ui/password-input";
 import { authClient } from "@/lib/auth-client";
 import {
   Card,
@@ -63,6 +66,14 @@ export default function SignUpPage() {
     mode: "onChange", // Validate on change for better UX
   });
 
+  // Dismiss a stale auth error as soon as the user edits any field.
+  useEffect(() => {
+    const subscription = form.watch(() => {
+      setAuthError((prev) => (prev ? null : prev));
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
+
   const handleSignUp = async (data: SignUpForm) => {
     if (isLoading) return;
 
@@ -74,14 +85,15 @@ export default function SignUpPage() {
         name: data.name,
         email: data.email,
         password: data.password,
-        callbackURL: "/",
+        callbackURL: "/dashboard",
       });
 
       if (result.error) {
         setAuthError(result.error.message || "Sign up failed. Please try again.");
       } else {
-        // Successful sign up - redirect will be handled by the auth client
-        router.push("/");
+        // Drop newly-registered users into the app, matching the sign-in flow,
+        // rather than the public marketing homepage.
+        router.push("/dashboard");
       }
     } catch (error) {
       console.error("Sign up error:", error);
@@ -163,7 +175,9 @@ export default function SignUpPage() {
                         autoComplete="new-password"
                         disabled={isLoading}
                         {...field}
-                      />
+                      >
+                        <PasswordInputStrengthChecker />
+                      </PasswordInput>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -174,7 +188,7 @@ export default function SignUpPage() {
                 type="submit"
                 className="w-full"
                 size="lg"
-                disabled={isLoading || !form.formState.isValid}
+                disabled={isLoading}
               >
                 {isLoading ? (
                   <>

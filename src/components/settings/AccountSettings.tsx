@@ -30,20 +30,38 @@ export function AccountSettings() {
     const router = useRouter();
     const [isEditing, setIsEditing] = useState(false);
     const [editedName, setEditedName] = useState("");
+    const [nameError, setNameError] = useState<string | null>(null);
+    const [isSavingName, setIsSavingName] = useState(false);
     const [isSigningOut, setIsSigningOut] = useState(false);
 
     const handleEditName = () => {
         if (profile) {
             setEditedName(profile.name);
+            setNameError(null);
             setIsEditing(true);
         }
     };
 
     const handleSaveName = async () => {
-        if (editedName.trim()) {
-            await updateProfile({ name: editedName.trim() });
-            setIsEditing(false);
+        if (isSavingName) return;
+        const trimmed = editedName.trim();
+        if (!trimmed) {
+            setNameError("Name cannot be empty.");
+            return;
         }
+        setNameError(null);
+        setIsSavingName(true);
+        try {
+            await updateProfile({ name: trimmed });
+            setIsEditing(false);
+        } finally {
+            setIsSavingName(false);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setIsEditing(false);
+        setNameError(null);
     };
 
     const handleSignOut = async () => {
@@ -109,23 +127,53 @@ export function AccountSettings() {
                     </Avatar>
                     <div className="flex-1 space-y-1">
                         {isEditing ? (
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    value={editedName}
-                                    onChange={(e) => setEditedName(e.target.value)}
-                                    className="h-9"
-                                    autoFocus
-                                />
-                                <Button size="sm" onClick={handleSaveName}>
-                                    Save
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => setIsEditing(false)}
-                                >
-                                    Cancel
-                                </Button>
+                            <div className="space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        value={editedName}
+                                        onChange={(e) => {
+                                            setEditedName(e.target.value);
+                                            if (nameError) setNameError(null);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                handleSaveName();
+                                            } else if (e.key === "Escape") {
+                                                e.preventDefault();
+                                                handleCancelEdit();
+                                            }
+                                        }}
+                                        className="h-9"
+                                        aria-label="Your name"
+                                        aria-invalid={!!nameError}
+                                        disabled={isSavingName}
+                                        autoFocus
+                                    />
+                                    <Button
+                                        size="sm"
+                                        onClick={handleSaveName}
+                                        disabled={isSavingName}
+                                    >
+                                        {isSavingName && (
+                                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                                        )}
+                                        Save
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={handleCancelEdit}
+                                        disabled={isSavingName}
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                                {nameError && (
+                                    <p className="text-xs text-destructive" role="alert">
+                                        {nameError}
+                                    </p>
+                                )}
                             </div>
                         ) : (
                             <>

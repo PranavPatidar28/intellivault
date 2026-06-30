@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useTheme } from "next-themes";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useSettings } from "@/hooks/use-settings";
@@ -23,6 +24,19 @@ import type { FontSizeOption, DisplayDensityOption } from "@/types/settings";
 export function AppearanceSettings() {
     const { theme, setTheme } = useTheme();
     const { preferences, isLoading, updatePreferences } = useSettings();
+
+    // The theme is persisted to the DB but next-themes is what actually drives
+    // the applied theme (via localStorage). On a fresh device/browser where
+    // localStorage is empty, next-themes falls back to its default and the
+    // saved preference is ignored. Reconcile by pushing the persisted theme
+    // into next-themes once it loads, if they diverge.
+    useEffect(() => {
+        if (preferences?.theme && preferences.theme !== theme) {
+            setTheme(preferences.theme);
+        }
+        // Only react to the persisted value loading/changing, not local toggles.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [preferences?.theme]);
 
     const handleThemeChange = (value: string) => {
         if (value) {

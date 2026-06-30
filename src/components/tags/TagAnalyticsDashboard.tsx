@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useTagAnalytics } from "@/hooks/useTagAnalytics";
 import { BarChart3, TrendingUp, Archive, FileWarning } from "lucide-react";
+import { getTextColorForBackground } from "@/lib/utils/tagColors";
 
 export function TagAnalyticsDashboard() {
     const { analytics, isLoading, error } = useTagAnalytics();
@@ -64,7 +65,9 @@ export function TagAnalyticsDashboard() {
                 <CardContent>
                     <div className="text-2xl font-bold">{analytics.archivedTags}</div>
                     <p className="text-xs text-muted-foreground mt-1">
-                        {Math.round((analytics.archivedTags / analytics.totalTags) * 100)}% of total
+                        {analytics.totalTags > 0
+                            ? Math.round((analytics.archivedTags / analytics.totalTags) * 100)
+                            : 0}% of total
                     </p>
                 </CardContent>
             </Card>
@@ -113,7 +116,7 @@ export function TagAnalyticsDashboard() {
                                         variant="secondary"
                                         style={{
                                             backgroundColor: tag.color || undefined,
-                                            color: tag.color ? "#fff" : undefined,
+                                            color: tag.color ? getTextColorForBackground(tag.color) : undefined,
                                         }}
                                     >
                                         {tag.name}

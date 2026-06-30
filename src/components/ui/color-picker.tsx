@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { TAG_COLOR_PALETTE, getRandomColor } from "@/lib/utils/tagColors";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,12 @@ interface ColorPickerProps {
 export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
     const [customColor, setCustomColor] = useState(value || "");
     const [isOpen, setIsOpen] = useState(false);
+
+    // Keep the custom-hex field in sync when the color is changed externally
+    // (e.g. a parent recolors the tag elsewhere) so it never shows a stale value.
+    useEffect(() => {
+        setCustomColor(value || "");
+    }, [value]);
 
     const handleColorSelect = (color: string) => {
         onChange(color);
@@ -66,6 +72,7 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
                         {TAG_COLOR_PALETTE.map((color) => (
                             <button
                                 key={color.value}
+                                type="button"
                                 onClick={() => handleColorSelect(color.value)}
                                 className="w-10 h-10 rounded-md border-2 border-transparent hover:border-primary focus:outline-none focus:border-primary relative transition-all"
                                 style={{ backgroundColor: color.value }}
@@ -82,6 +89,7 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
                     <div className="pt-2 border-t">
                         <Button
                             variant="outline"
+                            type="button"
                             className="w-full mb-2"
                             onClick={handleRandomColor}
                         >
@@ -92,12 +100,19 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
                             <Input
                                 type="text"
                                 placeholder="#FF5500"
+                                aria-label="Custom hex color"
                                 value={customColor}
                                 onChange={(e) => setCustomColor(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleCustomColorSubmit();
+                                    }
+                                }}
                                 className="flex-1"
                                 maxLength={7}
                             />
-                            <Button onClick={handleCustomColorSubmit} size="sm">
+                            <Button type="button" onClick={handleCustomColorSubmit} size="sm">
                                 Set
                             </Button>
                         </div>
