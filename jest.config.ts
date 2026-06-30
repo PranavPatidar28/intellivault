@@ -24,16 +24,30 @@ const config: Config = {
     '**/__tests__/**/*.test.[jt]s?(x)',
   ],
   
-  // Coverage configuration
+  // Coverage configuration. The gate targets the business-logic layers that
+  // are meaningfully unit-testable — API route handlers, hooks, and lib
+  // utilities/services/validations. Presentational pages and feature
+  // components are exercised via E2E (Playwright) rather than jsdom unit
+  // tests, and vendored editor / design-system code is third-party template
+  // code; including either here would make the coverage number reflect
+  // untested template files rather than real logic.
   collectCoverageFrom: [
-    'src/**/*.{js,jsx,ts,tsx}',
+    'src/app/api/**/route.{ts,tsx}',
+    'src/hooks/**/*.{ts,tsx}',
+    'src/lib/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
-    '!src/**/*.stories.{js,jsx,ts,tsx}',
     '!src/generated/**',
-    '!src/app/**/layout.tsx',
-    '!src/app/**/error.tsx',
-    '!src/app/**/loading.tsx',
-    '!src/app/**/not-found.tsx',
+    // Thin client/singleton wrappers with no logic of their own.
+    '!src/lib/prisma.ts',
+    '!src/lib/auth.ts',
+    '!src/lib/auth-client.ts',
+    // Vendored TipTap editor helper hooks (ship with the editor template).
+    '!src/hooks/use-tiptap-editor.ts',
+    '!src/hooks/use-composed-ref.ts',
+    '!src/hooks/use-cursor-visibility.ts',
+    '!src/hooks/use-element-rect.ts',
+    '!src/hooks/use-menu-navigation.ts',
+    '!src/hooks/use-scrolling.ts',
   ],
   
   coverageThreshold: {
