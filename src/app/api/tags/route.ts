@@ -7,7 +7,9 @@ import type { Prisma } from "@/generated/prisma";
 
 const tagQuerySchema = z.object({
   q: z.string().max(200).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(10),
+  // The tags page fetches all tags (up to 1000) in one request for fast
+  // client-side filtering/sorting, so the ceiling matches that intent.
+  limit: z.coerce.number().int().min(1).max(1000).default(10),
   page: z.coerce.number().int().min(1).default(1),
   sort: z
     .enum(["usageCount", "name", "createdAt", "lastUsed", "updatedAt"])
