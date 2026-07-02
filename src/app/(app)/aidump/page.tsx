@@ -65,7 +65,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Topbar } from "@/components/Topbar";
 import { useAIDump } from "@/hooks/use-ai-dump";
 import type { DraftSummary, AIDumpData } from "@/hooks/use-ai-dump";
 import { useFileUpload, SUPPORTED_FILE_TYPES } from "@/hooks/use-file-upload";
@@ -498,13 +498,10 @@ export default function AIDumpPage() {
     return (
         <div className="flex flex-col h-full bg-background">
             {/* Header */}
-            <header className="flex items-center justify-between px-4 md:px-6 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
-                <div className="flex items-center gap-2 md:gap-4 min-w-0">
-                    {/* Mobile nav trigger — this page has a custom layout, so the
-                        shared sidebar is otherwise unreachable on small screens. */}
-                    <SidebarTrigger className="md:hidden" />
+            <Topbar>
+                <div className="flex items-center gap-3 min-w-0">
                     <Link href="/dashboard" onClick={handleBackNavigation}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to dashboard">
+                        <Button variant="ghost" size="icon" aria-label="Back to dashboard">
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
                     </Link>
@@ -518,7 +515,7 @@ export default function AIDumpPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 md:gap-2">
+                <div className="flex items-center gap-2">
                     {/* Streaming Status Badge */}
                     {streamingStatus && (
                         <Badge variant="secondary" className="gap-1.5 animate-pulse hidden sm:flex" role="status" aria-live="polite">
@@ -529,7 +526,7 @@ export default function AIDumpPage() {
 
                     {/* Stop / cancel an in-flight generation */}
                     {isGenerating && (
-                        <Button variant="outline" size="sm" onClick={cancel} className="gap-1.5 text-xs">
+                        <Button variant="outline" onClick={cancel} className="gap-1.5 text-xs">
                             <Square className="h-3 w-3 fill-current" />
                             Stop
                         </Button>
@@ -539,7 +536,7 @@ export default function AIDumpPage() {
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 lg:hidden"
+                        className="lg:hidden"
                         aria-label="Open options"
                         onClick={() => setOptionsSheetOpen(true)}
                     >
@@ -549,7 +546,7 @@ export default function AIDumpPage() {
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 lg:hidden"
+                            className="lg:hidden"
                             aria-label="Open title, tags and summary"
                             onClick={() => setMetadataSheetOpen(true)}
                         >
@@ -559,17 +556,17 @@ export default function AIDumpPage() {
 
                     {aiDump && (
                         <>
-                            <Button variant="ghost" size="sm" onClick={handleReset} className="gap-1.5 text-xs">
+                            <Button variant="ghost" onClick={handleReset} className="gap-1.5 text-xs">
                                 <RotateCcw className="h-3 w-3" />
                                 <span className="hidden sm:inline">Reset</span>
                             </Button>
-                            <Button size="sm" onClick={handleSave} disabled={isProcessing || !selectedTitle.trim()} className="gap-1.5">
+                            <Button onClick={handleSave} disabled={isProcessing || !selectedTitle.trim()} className="gap-1.5">
                                 Save Note
                             </Button>
                         </>
                     )}
                 </div>
-            </header>
+            </Topbar>
 
             {/* Main Content - 3 Column Layout (lg+); stacks to a single column below lg. */}
             <div className="flex-1 flex flex-col lg:flex-row min-h-0">

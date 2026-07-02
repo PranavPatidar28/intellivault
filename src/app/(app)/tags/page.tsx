@@ -556,7 +556,7 @@ export default function TagsPage() {
         return (
             <div className="h-full flex flex-col">
                 <Topbar>
-                    <div className="text-lg font-semibold">Tags</div>
+                    <h1 className="text-lg font-semibold tracking-tight">Tags</h1>
                 </Topbar>
                 <div className="flex-1 flex overflow-hidden">
                     <div className="w-full md:w-1/2 border-r p-4">
@@ -573,86 +573,84 @@ export default function TagsPage() {
     return (
         <div className="h-full flex flex-col">
             <Topbar>
-                <div className="flex items-center justify-between w-full gap-2">
-                    <div className="text-lg font-semibold shrink-0">Tags</div>
+                <h1 className="text-lg font-semibold tracking-tight shrink-0">Tags</h1>
 
-                    {/* Filter toggles + import/export. Wraps on narrow screens and
-                        collapses button labels behind sm: so it never overflows. */}
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                        <Button
-                            variant={showFavorites ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setShowFavorites(!showFavorites)}
-                            aria-pressed={showFavorites}
-                        >
-                            <Star size={14} className="sm:mr-1" />
-                            <span className="hidden sm:inline">Favorites</span>
-                        </Button>
-                        <Button
-                            variant={showArchived ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setShowArchived(!showArchived)}
-                            aria-pressed={showArchived}
-                        >
-                            <Archive size={14} className="sm:mr-1" />
-                            <span className="hidden sm:inline">Archived</span>
-                        </Button>
-                        <Button
-                            variant={showOrphaned ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setShowOrphaned(!showOrphaned)}
-                            aria-pressed={showOrphaned}
-                        >
-                            <FileWarning size={14} className="sm:mr-1" />
-                            <span className="hidden sm:inline">Orphaned</span>
-                        </Button>
+                {/* Filter toggles + import/export. Wraps on narrow screens and
+                    collapses button labels behind sm: so it never overflows. */}
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button
+                        variant={showFavorites ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowFavorites(!showFavorites)}
+                        aria-pressed={showFavorites}
+                    >
+                        <Star size={14} className="sm:mr-1" />
+                        <span className="hidden sm:inline">Favorites</span>
+                    </Button>
+                    <Button
+                        variant={showArchived ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowArchived(!showArchived)}
+                        aria-pressed={showArchived}
+                    >
+                        <Archive size={14} className="sm:mr-1" />
+                        <span className="hidden sm:inline">Archived</span>
+                    </Button>
+                    <Button
+                        variant={showOrphaned ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowOrphaned(!showOrphaned)}
+                        aria-pressed={showOrphaned}
+                    >
+                        <FileWarning size={14} className="sm:mr-1" />
+                        <span className="hidden sm:inline">Orphaned</span>
+                    </Button>
 
-                        <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
+                    <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
 
-                        <Button
-                            variant={showAnalytics ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setShowAnalytics((v) => !v)}
-                            aria-pressed={showAnalytics}
-                            aria-label="Toggle tag analytics"
-                        >
-                            <BarChart3 size={14} className="sm:mr-1" />
-                            <span className="hidden sm:inline">Analytics</span>
-                        </Button>
+                    <Button
+                        variant={showAnalytics ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowAnalytics((v) => !v)}
+                        aria-pressed={showAnalytics}
+                        aria-label="Toggle tag analytics"
+                    >
+                        <BarChart3 size={14} className="sm:mr-1" />
+                        <span className="hidden sm:inline">Analytics</span>
+                    </Button>
 
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleExport("json")}
-                            aria-label="Export tags as JSON"
-                        >
-                            <Download size={14} className="sm:mr-1" />
-                            <span className="hidden sm:inline">Export</span>
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={isImporting}
-                            onClick={() => document.getElementById("tag-import-input")?.click()}
-                            aria-label="Import tags from a file"
-                        >
-                            <Upload size={14} className="sm:mr-1" />
-                            <span className="hidden sm:inline">
-                                {isImporting ? "Importing..." : "Import"}
-                            </span>
-                        </Button>
-                        <input
-                            id="tag-import-input"
-                            type="file"
-                            accept=".json,.csv,application/json,text/csv"
-                            className="hidden"
-                            onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleImportFile(file);
-                                e.target.value = "";
-                            }}
-                        />
-                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleExport("json")}
+                        aria-label="Export tags as JSON"
+                    >
+                        <Download size={14} className="sm:mr-1" />
+                        <span className="hidden sm:inline">Export</span>
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isImporting}
+                        onClick={() => document.getElementById("tag-import-input")?.click()}
+                        aria-label="Import tags from a file"
+                    >
+                        <Upload size={14} className="sm:mr-1" />
+                        <span className="hidden sm:inline">
+                            {isImporting ? "Importing..." : "Import"}
+                        </span>
+                    </Button>
+                    <input
+                        id="tag-import-input"
+                        type="file"
+                        accept=".json,.csv,application/json,text/csv"
+                        className="hidden"
+                        onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImportFile(file);
+                            e.target.value = "";
+                        }}
+                    />
                 </div>
             </Topbar>
 

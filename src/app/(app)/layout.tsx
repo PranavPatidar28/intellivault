@@ -39,12 +39,7 @@ export default async function AppLayout({
           On mobile the left padding clears the floating nav trigger.
         */}
         <div
-          className="h-full w-full overflow-hidden pl-14 md:pl-[var(--content-padding)]"
-          style={{
-            paddingTop: "var(--content-padding)",
-            paddingRight: "var(--content-padding)",
-            paddingBottom: "var(--content-padding)",
-          }}
+          className="h-full w-full overflow-hidden pl-14 pt-[var(--content-padding)] pr-[var(--content-padding)] pb-[var(--content-padding)] md:p-0"
         >
           {children}
         </div>

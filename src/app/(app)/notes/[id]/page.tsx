@@ -316,7 +316,7 @@ export default function NotePage() {
     return (
       <div>
         <Topbar>
-          <div className="text-lg font-semibold">Loading note...</div>
+          <h1 className="text-lg font-semibold tracking-tight">Loading note...</h1>
         </Topbar>
         <NoteEditorSkeleton />
       </div>
@@ -327,7 +327,7 @@ export default function NotePage() {
     return (
       <div>
         <Topbar>
-          <div className="text-lg font-semibold">Note not found</div>
+          <h1 className="text-lg font-semibold tracking-tight">Note not found</h1>
         </Topbar>
         <div className="flex flex-col items-center justify-center p-12">
           <AlertCircleIcon size={48} className="text-destructive mb-4" />
@@ -395,7 +395,6 @@ export default function NotePage() {
             onClick={() => setShowDeleteDialog(true)}
             disabled={isDeleting || isSaving}
             variant="destructive"
-            size="sm"
           >
             {isDeleting ? (
               <>
@@ -413,7 +412,6 @@ export default function NotePage() {
           <Button
             onClick={() => handleSaveNote(false)}
             disabled={isSaving || !hasUnsavedChanges || isContentEmpty}
-            size="sm"
           >
             {isSaving ? (
               <>

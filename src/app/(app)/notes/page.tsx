@@ -372,9 +372,9 @@ export default function NotesPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <Topbar className="flex-shrink-0">
+      <Topbar>
         <div className="flex items-center gap-4 flex-1">
-          <div className="p-2 text-lg font-semibold min-w-fit">Notes</div>
+          <h1 className="text-lg font-semibold tracking-tight shrink-0">Notes</h1>
           <div className="w-full max-w-xl">
             <NoteSearch />
           </div>

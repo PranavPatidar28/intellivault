@@ -179,7 +179,15 @@ export function DemoCard({
           <div className="p-5 sm:p-6">
             <div className="mb-4 flex items-center gap-2 text-xs font-medium text-[#8AE5EF]">
               <Sparkles className="size-4" />
-              AI Dump · generated just now
+              AI Dump
+              <span
+                className={cn(
+                  "transition-all duration-500",
+                  !reveal.actions && "opacity-0"
+                )}
+              >
+                {" "}· generated just now
+              </span>
             </div>
 
             {/* title */}
