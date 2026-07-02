@@ -504,40 +504,20 @@ export function AISidebar({
     // editor flex row.
     if (isMobile) {
         return (
-            <>
-                <div
-                    className={cn(
-                        "border-l bg-muted/20 flex flex-col items-center h-full shrink-0 w-[50px]",
-                        className
-                    )}
-                >
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={onToggle}
-                        className="h-8 w-8 mt-2"
-                        aria-label="Open AI Assistant"
-                        title="Open AI Assistant"
-                    >
-                        <Sparkles size={18} className="text-primary" />
-                    </Button>
-                </div>
-
-                <Sheet open={isOpen} onOpenChange={(open) => { if (open !== isOpen) onToggle(); }}>
-                    <SheetContent side="right" className="w-full sm:max-w-sm p-0 gap-0">
-                        <SheetHeader className="border-b bg-background/50 p-3">
-                            <SheetTitle className="flex items-center gap-2 text-sm">
-                                <Sparkles size={16} className="text-primary" />
-                                AI Assistant
-                            </SheetTitle>
-                            <SheetDescription className="sr-only">
-                                Generate summaries, suggest titles and tags, and find related notes for this note.
-                            </SheetDescription>
-                        </SheetHeader>
-                        {sections}
-                    </SheetContent>
-                </Sheet>
-            </>
+            <Sheet open={isOpen} onOpenChange={(open) => { if (open !== isOpen) onToggle(); }}>
+                <SheetContent side="right" className="w-full sm:max-w-sm p-0 gap-0">
+                    <SheetHeader className="border-b bg-background/50 p-3">
+                        <SheetTitle className="flex items-center gap-2 text-sm">
+                            <Sparkles size={16} className="text-primary" />
+                            AI Assistant
+                        </SheetTitle>
+                        <SheetDescription className="sr-only">
+                            Generate summaries, suggest titles and tags, and find related notes for this note.
+                        </SheetDescription>
+                    </SheetHeader>
+                    {sections}
+                </SheetContent>
+            </Sheet>
         );
     }
 

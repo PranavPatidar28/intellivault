@@ -232,7 +232,7 @@ export default function AIDumpPage() {
     }, []);
 
     // Resizable right sidebar
-    const { width: rightPanelWidth, handleMouseDown: handleRightPanelResize } = useResizablePanel(280, 220, 400);
+    const { width: rightPanelWidth, handleMouseDown: handleRightPanelResize } = useResizablePanel(300, 280, 400);
 
     const {
         aiDump,
@@ -499,23 +499,16 @@ export default function AIDumpPage() {
         <div className="flex flex-col h-full bg-background">
             {/* Header */}
             <Topbar>
-                <div className="flex items-center gap-3 min-w-0">
-                    <Link href="/dashboard" onClick={handleBackNavigation}>
-                        <Button variant="ghost" size="icon" aria-label="Back to dashboard">
-                            <ArrowLeft className="h-4 w-4" />
-                        </Button>
-                    </Link>
-                    <div className="min-w-0">
-                        <h1 className="text-lg font-semibold flex items-center gap-2 truncate tracking-tight">
-                            <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
-                                <Wand2 className="h-4 w-4" />
-                            </span>
-                            AI Dump
-                        </h1>
-                    </div>
+                <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+                    <h1 className="text-lg font-semibold flex items-center gap-2 truncate tracking-tight">
+                        <span className="hidden sm:flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
+                            <Wand2 className="h-4 w-4" />
+                        </span>
+                        AI Dump
+                    </h1>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                     {/* Streaming Status Badge */}
                     {streamingStatus && (
                         <Badge variant="secondary" className="gap-1.5 animate-pulse hidden sm:flex" role="status" aria-live="polite">
@@ -556,12 +549,13 @@ export default function AIDumpPage() {
 
                     {aiDump && (
                         <>
-                            <Button variant="ghost" onClick={handleReset} className="gap-1.5 text-xs">
+                            <Button variant="ghost" onClick={handleReset} className="gap-1.5 text-xs h-9 w-9 sm:w-auto p-0 sm:px-3 justify-center" title="Reset">
                                 <RotateCcw className="h-3 w-3" />
                                 <span className="hidden sm:inline">Reset</span>
                             </Button>
-                            <Button onClick={handleSave} disabled={isProcessing || !selectedTitle.trim()} className="gap-1.5">
-                                Save Note
+                            <Button onClick={handleSave} disabled={isProcessing || !selectedTitle.trim()} className="h-9 w-9 sm:w-auto p-0 sm:px-3 justify-center gap-1.5" title="Save Note">
+                                <Check className="h-4 w-4" />
+                                <span className="hidden sm:inline">Save Note</span>
                             </Button>
                         </>
                     )}
@@ -713,7 +707,7 @@ export default function AIDumpPage() {
                                             <Upload className="h-4 w-4" />
                                             Upload
                                         </Button>
-                                        <div className="text-xs text-muted-foreground space-x-3">
+                                        <div className="hidden sm:flex items-center text-xs text-muted-foreground gap-2">
                                             <span>{inputContent.length} chars</span>
                                             <span>•</span>
                                             <span>{wordCount} words</span>
@@ -726,7 +720,7 @@ export default function AIDumpPage() {
                                     >
                                         <Wand2 className="h-4 w-4" />
                                         Run AI Dump
-                                        <kbd className="ml-1 px-1.5 py-0.5 text-xs bg-primary-foreground/20 rounded font-mono">
+                                        <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs bg-primary-foreground/20 rounded font-mono">
                                             {isApple ? "⌘↵" : "Ctrl ↵"}
                                         </kbd>
                                     </Button>
@@ -1064,7 +1058,7 @@ export default function AIDumpPage() {
 
                 {/* Right Panel - Metadata & Actions (desktop inline; mobile in a Sheet) */}
                 <aside
-                    className="hidden lg:block flex-shrink-0 overflow-auto bg-muted/10"
+                    className="hidden lg:block flex-shrink-0 overflow-auto no-scrollbar bg-muted/10"
                     style={{ width: rightPanelWidth }}
                 >
                     <MetadataPanel
@@ -1111,7 +1105,7 @@ export default function AIDumpPage() {
 
             {/* Mobile: Metadata panel in a right Sheet */}
             <Sheet open={metadataSheetOpen} onOpenChange={setMetadataSheetOpen}>
-                <SheetContent side="right" className="w-[88vw] max-w-[340px] overflow-auto p-0 lg:hidden">
+                <SheetContent side="right" className="w-[88vw] max-w-[340px] overflow-auto no-scrollbar p-0 lg:hidden">
                     <SheetHeader className="px-4 pt-4 pb-0">
                         <SheetTitle className="flex items-center gap-2 text-sm">
                             <PanelRight className="h-4 w-4 text-primary" />
