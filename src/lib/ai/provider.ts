@@ -14,7 +14,8 @@
  * stored as note content.
  */
 
-import { wrapLanguageModel, extractReasoningMiddleware, type LanguageModel } from "ai";
+import { wrapLanguageModel, type LanguageModel } from "ai";
+import { extractFlexibleReasoningMiddleware } from "./flexible-reasoning-middleware";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -47,10 +48,10 @@ function buildModel(provider: ProviderName): LanguageModel {
           "X-Title": "IntelliVault",
         },
       });
-      // Extract inline <think> reasoning; no-op when the model emits none.
+      // Extract inline <think> and gemma reasoning; no-op when the model emits none.
       return wrapLanguageModel({
         model: openrouter(env.OPENROUTER_MODEL),
-        middleware: extractReasoningMiddleware({ tagName: "think" }),
+        middleware: extractFlexibleReasoningMiddleware(),
       });
     }
     case "nvidia": {
@@ -61,7 +62,7 @@ function buildModel(provider: ProviderName): LanguageModel {
       });
       return wrapLanguageModel({
         model: nvidia(env.NVIDIA_MODEL),
-        middleware: extractReasoningMiddleware({ tagName: "think" }),
+        middleware: extractFlexibleReasoningMiddleware(),
       });
     }
     case "ollama":
@@ -74,7 +75,7 @@ function buildModel(provider: ProviderName): LanguageModel {
       });
       return wrapLanguageModel({
         model: ollama(env.OLLAMA_MODEL),
-        middleware: extractReasoningMiddleware({ tagName: "think" }),
+        middleware: extractFlexibleReasoningMiddleware(),
       });
     }
   }

@@ -40,15 +40,17 @@ const mockWrapLanguageModel = jest.fn(
     middleware,
   })
 );
-const mockExtractReasoning = jest.fn((opts: unknown) => ({
-  __middleware: "extract-reasoning",
+const mockExtractFlexibleReasoning = jest.fn((opts?: unknown) => ({
+  __middleware: "extract-flexible-reasoning",
   opts,
 }));
 
 jest.mock("ai", () => ({
   wrapLanguageModel: (...a: unknown[]) => mockWrapLanguageModel(...(a as [never])),
-  extractReasoningMiddleware: (...a: unknown[]) =>
-    mockExtractReasoning(...(a as [never])),
+}));
+jest.mock("@/lib/ai/flexible-reasoning-middleware", () => ({
+  extractFlexibleReasoningMiddleware: (...a: unknown[]) =>
+    mockExtractFlexibleReasoning(...(a as [never])),
 }));
 jest.mock("@ai-sdk/google", () => ({
   createGoogleGenerativeAI: (...a: unknown[]) => mockCreateGoogle(...(a as [never])),
@@ -116,7 +118,7 @@ describe("getModel - provider build wiring", () => {
 
   it("wraps OpenRouter with extract-reasoning middleware", () => {
     const model = getModel("openrouter") as unknown as { __wrapped: boolean };
-    expect(mockExtractReasoning).toHaveBeenCalledWith({ tagName: "think" });
+    expect(mockExtractFlexibleReasoning).toHaveBeenCalled();
     expect(mockWrapLanguageModel).toHaveBeenCalled();
     expect(model.__wrapped).toBe(true);
     const cfg = mockCreateOpenAICompatible.mock.calls[0]![0];
