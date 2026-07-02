@@ -58,12 +58,25 @@ export function AISettings() {
             description="Configure AI-powered features and model preferences"
         >
             {/* LLM Provider */}
-            <SettingsGroup title="Language Model">
+            <SettingsGroup
+                title={
+                    <span className="flex items-center gap-2">
+                        <span>Language Model</span>
+                        <Badge
+                            variant="secondary"
+                            className="text-[10px] px-1.5 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/10 font-semibold normal-case tracking-normal"
+                        >
+                            Coming Soon
+                        </Badge>
+                    </span>
+                }
+            >
                 <SettingsItem
                     label="Default Provider"
                     description="Choose your preferred AI provider for text generation"
                 >
                     <Select
+                        disabled
                         value={currentProvider}
                         onValueChange={(v) => handleProviderChange(v as LLMProviderOption)}
                     >
@@ -110,6 +123,7 @@ export function AISettings() {
                     description="The model to use for AI features"
                 >
                     <Select
+                        disabled
                         value={preferences?.defaultLLMModel || availableModels[0]?.value}
                         onValueChange={handleModelChange}
                     >
@@ -172,17 +186,7 @@ export function AISettings() {
                 </SettingsItem>
             </SettingsGroup>
 
-            {/* Info */}
-            <div className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
-                <p className="flex items-start gap-2">
-                    <Brain className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <span>
-                        AI features use your configured API keys. Make sure you have valid
-                        API keys set up in your environment variables for the selected
-                        provider.
-                    </span>
-                </p>
-            </div>
+
         </SettingsSection>
     );
 }
