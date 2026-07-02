@@ -17,15 +17,25 @@ import {
   CheckCircleIcon,
   AlertCircleIcon,
   ClockIcon,
+  Sparkles,
+  MoreVertical,
 } from "lucide-react";
 import { Note } from "@/types/note";
 import { NoteEditorSkeleton } from "@/components/skeletons/note-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getRelativeTime } from "@/lib/utils/text";
 import { Tag } from "@/components/TagInput";
 import { NoteTags } from "@/components/NoteTags";
 import { AISidebar } from "@/components/AISidebar";
 import { markdownToTipTap } from "@/lib/utils/markdown-to-tiptap";
 import { usePreferences } from "@/components/PreferencesProvider";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function NotePage() {
   const params = useParams();
@@ -314,9 +324,16 @@ export default function NotePage() {
 
   if (isLoading) {
     return (
-      <div>
+      <div className="h-full flex flex-col overflow-hidden">
         <Topbar>
-          <h1 className="text-lg font-semibold tracking-tight">Loading note...</h1>
+          <div className="flex items-center gap-1 sm:gap-2 flex-1 min-w-0">
+            <Skeleton className="h-9 w-9 rounded-md shrink-0 -ml-2 md:-ml-3" />
+            <Skeleton className="h-7 w-48 rounded" />
+          </div>
+          <div className="flex gap-2 items-center shrink-0">
+            <Skeleton className="h-9 w-20 rounded-md" />
+            <Skeleton className="h-9 w-24 rounded-md" />
+          </div>
         </Topbar>
         <NoteEditorSkeleton />
       </div>
@@ -346,85 +363,120 @@ export default function NotePage() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <Topbar>
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <Button variant="ghost" size="icon" onClick={handleGoBack} className="shrink-0" aria-label="Back to notes" title="Back to notes">
-            <ArrowLeftIcon size={16} />
+        <div className="flex items-center gap-1 sm:gap-2 flex-1 min-w-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0 -ml-2 md:-ml-3"
+            onClick={() => router.push("/notes")}
+            title="Back to Notes"
+          >
+            <ArrowLeftIcon className="h-5 w-5" />
           </Button>
           <NoteTitle initialTitle={noteTitle} onTitleChange={handleTitleChange} />
         </div>
 
-
-
-        <div className="flex gap-2 items-center">
-          <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center shrink-0">
+          <div className="hidden sm:flex gap-2 items-center">
             {/* Save state — one clear indicator at a time */}
             {saveStatus === "saving" || isSaving ? (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground" title="Saving...">
                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
-                <span>Saving…</span>
+                <span className="hidden sm:inline">Saving…</span>
               </div>
             ) : saveStatus === "error" && errorMessage ? (
-              <div className="flex items-center gap-1 text-sm text-destructive">
+              <div className="flex items-center gap-1 text-sm text-destructive" title={errorMessage}>
                 <AlertCircleIcon size={16} />
-                <span>{errorMessage}</span>
+                <span className="hidden sm:inline">{errorMessage}</span>
               </div>
             ) : isContentEmpty ? (
-              <div className="flex items-center gap-1 text-xs text-destructive">
+              <div className="flex items-center gap-1 text-xs text-destructive" title="Content cannot be empty">
                 <AlertCircleIcon size={12} />
-                <span>Add content to save</span>
+                <span className="hidden sm:inline">Add content to save</span>
               </div>
             ) : hasUnsavedChanges ? (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground" title="Unsaved changes">
                 <ClockIcon size={12} />
-                <span>Unsaved changes</span>
+                <span className="hidden sm:inline">Unsaved changes</span>
               </div>
             ) : saveStatus === "saved" ? (
-              <div className="flex items-center gap-1 text-sm text-success">
+              <div className="flex items-center gap-1 text-sm text-success" title="Saved">
                 <CheckCircleIcon size={16} />
-                <span>Saved</span>
+                <span className="hidden sm:inline">Saved</span>
               </div>
             ) : savedAgoLabel ? (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground" title={`Saved ${savedAgoLabel}`}>
                 <ClockIcon size={12} />
-                <span>Saved {savedAgoLabel}</span>
+                <span className="hidden sm:inline">Saved {savedAgoLabel}</span>
               </div>
             ) : null}
           </div>
 
-          <Button
-            onClick={() => setShowDeleteDialog(true)}
-            disabled={isDeleting || isSaving}
-            variant="destructive"
-          >
-            {isDeleting ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                Deleting...
-              </>
-            ) : (
-              <>
-                <TrashIcon size={16} className="mr-2" />
-                Delete
-              </>
-            )}
-          </Button>
+          {/* Desktop view: show all buttons inline */}
+          <div className="hidden sm:flex items-center gap-2">
+            <Button
+              onClick={() => setShowDeleteDialog(true)}
+              disabled={isDeleting || isSaving}
+              variant="destructive"
+              className="h-9 gap-1.5 px-3"
+              title="Delete Note"
+            >
+              {isDeleting ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+              ) : (
+                <>
+                  <TrashIcon size={16} />
+                  <span>Delete</span>
+                </>
+              )}
+            </Button>
 
-          <Button
-            onClick={() => handleSaveNote(false)}
-            disabled={isSaving || !hasUnsavedChanges || isContentEmpty}
-          >
-            {isSaving ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <SaveIcon size={16} className="mr-2" />
-                {hasUnsavedChanges ? "Save Changes" : "Saved"}
-              </>
-            )}
-          </Button>
+            <Button
+              onClick={() => handleSaveNote(false)}
+              disabled={isSaving || !hasUnsavedChanges || isContentEmpty}
+              className="h-9 gap-1.5 px-3"
+              title={hasUnsavedChanges ? "Save Changes" : "Saved"}
+            >
+              {isSaving ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+              ) : (
+                <>
+                  <SaveIcon size={16} />
+                  <span>{hasUnsavedChanges ? "Save Changes" : "Saved"}</span>
+                </>
+              )}
+            </Button>
+          </div>
+
+          {/* Mobile view: show only three-dot menu */}
+          <div className="flex sm:hidden items-center gap-1.5">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 w-9 p-0 justify-center">
+                  <MoreVertical className="h-4.5 w-4.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem
+                  onClick={() => handleSaveNote(false)}
+                  disabled={isSaving || !hasUnsavedChanges || isContentEmpty}
+                  className="gap-2"
+                >
+                  <SaveIcon size={14} />
+                  <span>{hasUnsavedChanges ? "Save Changes" : "Saved"}</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteDialog(true)}
+                  disabled={isDeleting || isSaving}
+                  className="text-destructive focus:text-destructive focus:bg-destructive/10 gap-2"
+                >
+                  <TrashIcon size={14} />
+                  <span>Delete Note</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </Topbar>
 
@@ -433,16 +485,28 @@ export default function NotePage() {
         {/* Left Column: Tags + Editor */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Tags bar */}
-          <div className="px-4 py-2 border-b shrink-0">
-            <NoteTags
-              tags={tags}
-              onChange={(newTags) => {
-                setTags(newTags);
-                setHasUnsavedChanges(true);
-                setLastEditTime(new Date());
-                setSaveStatus(null);
-              }}
-            />
+          <div className="px-4 py-2 border-b shrink-0 flex items-center justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <NoteTags
+                tags={tags}
+                onChange={(newTags) => {
+                  setTags(newTags);
+                  setHasUnsavedChanges(true);
+                  setLastEditTime(new Date());
+                  setSaveStatus(null);
+                }}
+              />
+            </div>
+            {/* Mobile-only AI Sparkles Button */}
+            <Button
+              onClick={toggleAISidebar}
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 sm:hidden shrink-0 bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+              title="AI Assistant"
+            >
+              <Sparkles className="size-4 animate-pulse" />
+            </Button>
           </div>
 
           {/* Editor */}

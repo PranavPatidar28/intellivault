@@ -162,6 +162,56 @@ describe('markdownToTipTap', () => {
       expect(doc.content[0].content).toEqual([{ type: 'text', text: 'plain unformatted text' }]);
     });
   });
+
+  describe('table parsing', () => {
+    it('parses a simple markdown table correctly', () => {
+      const tableMarkdown = 
+        '| Header 1 | Header 2 |\n' +
+        '| --- | --- |\n' +
+        '| Cell 1 | Cell 2 |\n' +
+        '| Cell 3 | Cell 4 |';
+      
+      const doc = markdownToTipTap(tableMarkdown);
+      expect(doc.content).toHaveLength(1);
+      expect(doc.content[0].type).toBe('table');
+      expect(doc.content[0].content).toHaveLength(3);
+
+      const headerRow = doc.content[0].content![0];
+      expect(headerRow.type).toBe('tableRow');
+      expect(headerRow.content).toHaveLength(2);
+      expect(headerRow.content![0].type).toBe('tableHeader');
+      expect(headerRow.content![0].content![0]).toMatchObject({
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Header 1' }]
+      });
+
+      const bodyRow1 = doc.content[0].content![1];
+      expect(bodyRow1.type).toBe('tableRow');
+      expect(bodyRow1.content).toHaveLength(2);
+      expect(bodyRow1.content![0].type).toBe('tableCell');
+      expect(bodyRow1.content![0].content![0]).toMatchObject({
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Cell 1' }]
+      });
+    });
+
+    it('parses a table with inline formatting in cells', () => {
+      const tableMarkdown = 
+        '| Col A | Col B |\n' +
+        '|:---|:---|\n' +
+        '| **bold** | `code` |';
+
+      const doc = markdownToTipTap(tableMarkdown);
+      const cells = doc.content[0].content![1].content!;
+      
+      expect(cells[0].content![0].content).toEqual([
+        { type: 'text', text: 'bold', marks: [{ type: 'bold' }] }
+      ]);
+      expect(cells[1].content![0].content).toEqual([
+        { type: 'text', text: 'code', marks: [{ type: 'code' }] }
+      ]);
+    });
+  });
 });
 
 describe('stripCodeFences', () => {

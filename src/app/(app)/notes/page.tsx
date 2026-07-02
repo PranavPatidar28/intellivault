@@ -373,20 +373,24 @@ export default function NotesPage() {
   return (
     <div className="h-full flex flex-col">
       <Topbar>
-        <div className="flex items-center gap-4 flex-1">
+        <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
           <h1 className="text-lg font-semibold tracking-tight shrink-0">Notes</h1>
-          <div className="w-full max-w-xl">
+          <div className="w-full max-w-xl hidden md:block">
             <NoteSearch />
           </div>
         </div>
 
         {/* View controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Sort dropdown */}
           <Select value={sortBy} onValueChange={handleSortChange}>
-            <SelectTrigger className="w-[140px] h-9">
-              <ArrowUpDown size={14} className="mr-2 text-muted-foreground" />
-              <SelectValue placeholder="Sort by" />
+            <SelectTrigger className="w-9 sm:w-40 h-9 p-0 sm:px-3 justify-center sm:justify-between [&>svg:last-child]:hidden sm:[&>svg:last-child]:inline-block">
+              <div className="flex items-center">
+                <ArrowUpDown size={14} className="sm:mr-2 text-muted-foreground" />
+                <span className="hidden sm:inline">
+                  <SelectValue placeholder="Sort by" />
+                </span>
+              </div>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="updatedAt">Last Modified</SelectItem>
@@ -399,11 +403,11 @@ export default function NotesPage() {
           {/* Tag filter */}
           <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 gap-2">
+              <Button variant="outline" size="sm" className="h-9 w-9 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-2 justify-center">
                 <Filter size={14} />
                 <span className="hidden sm:inline">Filter</span>
                 {filterTags.length > 0 && (
-                  <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                  <Badge variant="secondary" className="h-5 px-1.5 text-xs ml-0.5 sm:ml-0">
                     {filterTags.length}
                   </Badge>
                 )}
@@ -486,12 +490,17 @@ export default function NotesPage() {
             </ToggleGroup>
           </TooltipProvider>
 
-          <Button onClick={() => setIsAddNoteModalOpen(true)}>
-            <PlusSquareIcon size={16} className="mr-2" />
-            Add Note
+          <Button onClick={() => setIsAddNoteModalOpen(true)} className="h-9 w-9 sm:w-auto p-0 sm:px-3 justify-center">
+            <PlusSquareIcon size={16} className="sm:mr-2" />
+            <span className="hidden sm:inline">Add Note</span>
           </Button>
         </div>
       </Topbar>
+
+      {/* Mobile search bar (shows only on mobile) */}
+      <div className="p-4 pb-2 md:hidden bg-background border-b border-border/40">
+        <NoteSearch />
+      </div>
 
       {/* Add Note Modal */}
       {isAddNoteModalOpen && (
