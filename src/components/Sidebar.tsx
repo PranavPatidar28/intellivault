@@ -2,6 +2,7 @@
 
 import { Home, Inbox, Settings, FolderOpen, Sparkles, Tag } from "lucide-react";
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 import { usePathname } from "next/navigation";
 
 import {
@@ -67,9 +68,24 @@ export function AppSidebar({ session }: AppSidebarProps) {
 
   return (
     <Sidebar collapsible="icon">
-      <div className="h-12 flex justify-between items-center overflow-clip">
+      <div className="flex h-12 items-center justify-between overflow-clip">
         {sidebarContext.open ? (
-          <span className="text-2xl font-semibold m-3">IntelliVault</span>
+          <Link
+            href="/dashboard"
+            className="px-3 py-2 group/brand"
+            onClick={() => {
+              if (sidebarContext.isMobile) {
+                sidebarContext.setOpenMobile(false);
+              }
+            }}
+          >
+            <Logo
+              iconSize={26}
+              showText
+              textClass="text-lg"
+              className="transition-transform group-hover/brand:scale-105 duration-200"
+            />
+          </Link>
         ) : null}
         <SidebarTrigger className="m-2.5" />
       </div>
@@ -94,7 +110,14 @@ export function AppSidebar({ session }: AppSidebarProps) {
                       isActive={isActive}
                       tooltip={item.title}
                     >
-                      <Link href={item.url}>
+                      <Link
+                        href={item.url}
+                        onClick={() => {
+                          if (sidebarContext.isMobile) {
+                            sidebarContext.setOpenMobile(false);
+                          }
+                        }}
+                      >
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>

@@ -32,7 +32,7 @@ export function NavUser({
   email: string;
   image?: string;
 }) {
-  const { isMobile } = useSidebar();
+  const { isMobile, setOpenMobile } = useSidebar();
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -101,7 +101,12 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => router.push("/settings")}>
+              <DropdownMenuItem onClick={() => {
+                router.push("/settings");
+                if (isMobile) {
+                  setOpenMobile(false);
+                }
+              }}>
                 <BadgeCheck />
                 Account
               </DropdownMenuItem>

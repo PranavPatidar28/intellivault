@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +18,7 @@ import {
 } from "@/components/ui/popover";
 import { Search, Grid3x3, List, Trash2, Palette, GitMerge, TagsIcon } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { TAG_COLOR_PALETTE, getTextColorForBackground } from "@/lib/utils/tagColors";
+import { TAG_COLOR_PALETTE } from "@/lib/utils/tagColors";
 
 interface Tag {
     id: string;
@@ -186,23 +185,23 @@ export function TagList({
                 {/* Bulk Actions */}
                 {selectedTagIds.length > 0 && (
                     <div className="flex items-center gap-2 p-2 bg-muted rounded">
-                        <span className="text-sm">{selectedTagIds.length} selected</span>
-                        <Button size="sm" variant="outline" onClick={deselectAll}>
+                        <span className="text-xs sm:text-sm font-medium">{selectedTagIds.length} <span className="hidden xs:inline">selected</span><span className="xs:hidden">sel.</span></span>
+                        <Button size="sm" variant="outline" onClick={deselectAll} className="h-8 px-2 text-xs">
                             Clear
                         </Button>
-                        <Button size="sm" variant="outline" onClick={selectAll}>
+                        <Button size="sm" variant="outline" onClick={selectAll} className="h-8 px-2 text-xs">
                             All
                         </Button>
                         <div className="flex-1" />
-                        <Button size="sm" variant="outline" onClick={onMerge}>
-                            <GitMerge size={14} className="mr-1" />
-                            Merge
+                        <Button size="sm" variant="outline" onClick={onMerge} className="h-8 w-8 sm:w-auto p-0 sm:px-3 justify-center" title="Merge Tags">
+                            <GitMerge size={14} className="sm:mr-1" />
+                            <span className="hidden sm:inline">Merge</span>
                         </Button>
                         <Popover open={isColorPopoverOpen} onOpenChange={setIsColorPopoverOpen}>
                             <PopoverTrigger asChild>
-                                <Button size="sm" variant="outline">
-                                    <Palette size={14} className="mr-1" />
-                                    Color
+                                <Button size="sm" variant="outline" className="h-8 w-8 sm:w-auto p-0 sm:px-3 justify-center" title="Recolor Tags">
+                                    <Palette size={14} className="sm:mr-1" />
+                                    <span className="hidden sm:inline">Color</span>
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-56 p-3" align="start">
@@ -227,9 +226,9 @@ export function TagList({
                                 </div>
                             </PopoverContent>
                         </Popover>
-                        <Button size="sm" variant="destructive" onClick={onBulkDelete}>
-                            <Trash2 size={14} className="mr-1" />
-                            Delete
+                        <Button size="sm" variant="destructive" onClick={onBulkDelete} className="h-8 w-8 sm:w-auto p-0 sm:px-3 justify-center" title="Delete Tags">
+                            <Trash2 size={14} className="sm:mr-1" />
+                            <span className="hidden sm:inline">Delete</span>
                         </Button>
                     </div>
                 )}
@@ -290,30 +289,26 @@ export function TagList({
                                     {rowTags.map((tag) => (
                                         <div
                                             key={tag.id}
-                                            className={`flex flex-col gap-2 p-4 rounded-lg border cursor-pointer transition-colors ${selectedTag?.id === tag.id
-                                                ? "bg-accent border-primary"
-                                                : "hover:bg-accent/50"
+                                            className={`group flex flex-col gap-2 p-4 rounded-xl border cursor-pointer transition-all ${selectedTag?.id === tag.id
+                                                ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/30"
+                                                : "hover:border-ring/40 hover:bg-accent/40 hover:shadow-sm"
                                                 }`}
                                             onClick={() => onTagSelect(tag)}
                                         >
                                             <div className="flex items-start justify-between">
+                                                <span
+                                                    className="size-3 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+                                                    style={{ backgroundColor: tag.color || "var(--muted-foreground)" }}
+                                                    aria-hidden="true"
+                                                />
                                                 <Checkbox
                                                     checked={selectedTagIds.includes(tag.id)}
                                                     onCheckedChange={() => toggleTagSelection(tag.id)}
                                                     onClick={(e) => e.stopPropagation()}
                                                 />
                                             </div>
-                                            <Badge
-                                                variant="secondary"
-                                                className="w-fit"
-                                                style={{
-                                                    backgroundColor: tag.color || undefined,
-                                                    color: tag.color ? getTextColorForBackground(tag.color) : undefined,
-                                                }}
-                                            >
-                                                {tag.name}
-                                            </Badge>
-                                            <span className="text-sm text-muted-foreground">
+                                            <span className="truncate font-medium">{tag.name}</span>
+                                            <span className="text-sm text-muted-foreground tabular-nums">
                                                 {tag.usageCount} note{tag.usageCount !== 1 ? "s" : ""}
                                             </span>
                                         </div>
@@ -338,9 +333,9 @@ export function TagList({
                                 className="pb-2"
                             >
                                 <div
-                                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedTag?.id === tag.id
-                                        ? "bg-accent border-primary"
-                                        : "hover:bg-accent/50"
+                                    className={`group flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${selectedTag?.id === tag.id
+                                        ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/30"
+                                        : "hover:border-ring/40 hover:bg-accent/40 hover:shadow-sm"
                                         }`}
                                     onClick={() => onTagSelect(tag)}
                                 >
@@ -349,16 +344,13 @@ export function TagList({
                                         onCheckedChange={() => toggleTagSelection(tag.id)}
                                         onClick={(e) => e.stopPropagation()}
                                     />
-                                    <Badge
-                                        variant="secondary"
-                                        style={{
-                                            backgroundColor: tag.color || undefined,
-                                            color: tag.color ? getTextColorForBackground(tag.color) : undefined,
-                                        }}
-                                    >
-                                        {tag.name}
-                                    </Badge>
-                                    <span className="text-sm text-muted-foreground ml-auto">
+                                    <span
+                                        className="size-3 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+                                        style={{ backgroundColor: tag.color || "var(--muted-foreground)" }}
+                                        aria-hidden="true"
+                                    />
+                                    <span className="truncate font-medium">{tag.name}</span>
+                                    <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums">
                                         {tag.usageCount} note{tag.usageCount !== 1 ? "s" : ""}
                                     </span>
                                 </div>

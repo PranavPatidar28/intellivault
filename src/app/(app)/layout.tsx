@@ -28,23 +28,13 @@ export default async function AppLayout({
           where the in-sidebar trigger takes over. The content wrapper reserves
           a left gutter on mobile so page headers never sit under it.
         */}
-        <SidebarTrigger
-          aria-label="Open navigation menu"
-          className="fixed left-2 top-2 z-50 size-9 border bg-background/80 shadow-sm backdrop-blur-sm md:hidden"
-        />
         {/*
-          App content canvas. Consumes the Display Density preference
-          (--content-padding, set by PreferencesProvider) so Compact/Comfortable/
-          Spacious actually changes the shell inset instead of being a no-op.
-          On mobile the left padding clears the floating nav trigger.
+          App content canvas.
+          On both mobile and desktop, the page takes up the full width/height
+          with a flush layout.
         */}
         <div
-          className="h-full w-full overflow-hidden pl-14 md:pl-[var(--content-padding)]"
-          style={{
-            paddingTop: "var(--content-padding)",
-            paddingRight: "var(--content-padding)",
-            paddingBottom: "var(--content-padding)",
-          }}
+          className="h-full w-full overflow-hidden p-0"
         >
           {children}
         </div>

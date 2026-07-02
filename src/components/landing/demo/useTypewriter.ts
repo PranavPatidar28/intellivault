@@ -34,14 +34,16 @@ export function useTypewriter(
     const tick = (now: number) => {
       acc += now - last;
       last = now;
-      // ~22ms/char average with jitter so it reads as typing, not a progress bar
-      const step = 16 + Math.random() * 55;
-      if (acc >= step) {
-        acc = 0;
-        if (indexRef.current < text.length) {
-          indexRef.current += 1;
-          setShown(text.slice(0, indexRef.current));
-        }
+      // Snappier, faster typing speed for landing page engagement (~10ms/char average)
+      const step = 4 + Math.random() * 12;
+      let typedAny = false;
+      while (acc >= step && indexRef.current < text.length) {
+        acc -= step;
+        indexRef.current += 1;
+        typedAny = true;
+      }
+      if (typedAny) {
+        setShown(text.slice(0, indexRef.current));
       }
       if (indexRef.current < text.length) {
         raf = requestAnimationFrame(tick);

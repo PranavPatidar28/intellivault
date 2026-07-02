@@ -31,6 +31,7 @@ import {
     Upload
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { Topbar } from "@/components/Topbar"
 
 export default function MediaPage() {
     const { toast } = useToast()
@@ -213,282 +214,310 @@ export default function MediaPage() {
     }
 
     return (
-        <div className="h-full overflow-y-auto">
-            <div className="container mx-auto py-6 px-4">
-            {/* Header */}
-            <div className="flex flex-col gap-4 mb-6">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <h1 className="text-2xl font-bold">Media Library</h1>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            multiple
-                            className="hidden"
-                            onChange={(e) => handleUploadFiles(e.target.files)}
-                        />
-                        <Button
-                            size="sm"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isUploading}
-                        >
-                            {isUploading ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                                <Upload className="h-4 w-4 mr-2" />
-                            )}
-                            Upload
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading}>
-                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                            Refresh
-                        </Button>
-                    </div>
+        <div className="h-full flex flex-col bg-background">
+            <Topbar>
+                <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+                    <h1 className="text-lg font-semibold tracking-tight">Media Library</h1>
                 </div>
-
-                {/* Filters and actions */}
-                <div className="flex flex-wrap items-center gap-4">
-                    <Select
-                        value={fileType || "all"}
-                        onValueChange={(value) =>
-                            setFileType(value === "all" ? null : (value as FileType))
-                        }
+                <div className="flex items-center gap-2 shrink-0">
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => handleUploadFiles(e.target.files)}
+                    />
+                    <Button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="h-9 w-9 sm:w-auto p-0 sm:px-4 justify-center"
+                        title="Upload File"
                     >
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="Filter by type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All media</SelectItem>
-                            <SelectItem value="IMAGE">Images</SelectItem>
-                            <SelectItem value="VIDEO">Videos</SelectItem>
-                            <SelectItem value="AUDIO">Audio</SelectItem>
-                            <SelectItem value="DOCUMENT">Documents</SelectItem>
-                        </SelectContent>
-                    </Select>
+                        {isUploading ? (
+                            <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
+                        ) : (
+                            <Upload className="h-4 w-4 sm:mr-2" />
+                        )}
+                        <span className="hidden sm:inline">Upload</span>
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={refresh}
+                        disabled={isLoading}
+                        className="h-9 w-9 sm:w-auto p-0 sm:px-4 justify-center"
+                        title="Refresh"
+                    >
+                        <RefreshCw className={`h-4 w-4 sm:mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                        <span className="hidden sm:inline">Refresh</span>
+                    </Button>
+                </div>
+            </Topbar>
 
-                    <div className="flex-1" />
+            <div className="flex-1 overflow-y-auto">
+                <div className="container mx-auto py-6 px-4 space-y-6">
+                    {/* Filters/Actions row */}
+                    <div className="flex flex-col gap-4">
 
-                    {isSelectionMode ? (
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">
-                                {selectedUrls.size} selected
-                            </span>
-                            <Button variant="outline" size="sm" onClick={handleSelectAll}>
-                                {selectedUrls.size === media.length ? "Deselect all" : "Select all"}
-                            </Button>
-                            <Button
-                                variant="destructive"
-                                size="sm"
-                                disabled={selectedUrls.size === 0}
-                                onClick={() => setIsBulkDeleteOpen(true)}
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <Select
+                                value={fileType || "all"}
+                                onValueChange={(value) =>
+                                    setFileType(value === "all" ? null : (value as FileType))
+                                }
                             >
-                                <Trash2 className="h-4 w-4 mr-1" />
-                                Delete selected
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={handleExitSelectionMode}>
-                                <X className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    ) : (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setIsSelectionMode(true)}
-                            disabled={media.length === 0}
-                        >
-                            <CheckSquare className="h-4 w-4 mr-1" />
-                            Select
-                        </Button>
-                    )}
-                </div>
-            </div>
+                                <SelectTrigger className="w-full sm:w-[180px]">
+                                    <SelectValue placeholder="Filter by type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All media</SelectItem>
+                                    <SelectItem value="IMAGE">Images</SelectItem>
+                                    <SelectItem value="VIDEO">Videos</SelectItem>
+                                    <SelectItem value="AUDIO">Audio</SelectItem>
+                                    <SelectItem value="DOCUMENT">Documents</SelectItem>
+                                </SelectContent>
+                            </Select>
 
-            {/* Error state */}
-            {error && (
-                <div className="rounded-lg border border-destructive bg-destructive/10 p-4 mb-6">
-                    <p className="text-destructive">{error}</p>
-                </div>
-            )}
+                            <div className="hidden sm:block flex-1" />
 
-            {/* Loading state */}
-            {isLoading && media.length === 0 && (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-            )}
-
-            {/* Empty state */}
-            {!isLoading && media.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                    <FolderOpen className="h-16 w-16 mb-4" />
-                    <p className="text-lg font-medium">No media files</p>
-                    <p className="text-sm">
-                        {fileType
-                            ? `No ${fileType.toLowerCase()} files found`
-                            : "Upload media here or add it from within your notes"}
-                    </p>
-                    {!fileType && (
-                        <Button
-                            className="mt-4"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isUploading}
-                        >
-                            {isUploading ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            {isSelectionMode ? (
+                                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto bg-muted/40 p-2 sm:p-0 rounded-lg">
+                                    <span className="text-xs sm:text-sm text-muted-foreground font-medium shrink-0 pl-1 sm:pl-0">
+                                        {selectedUrls.size} selected
+                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                        <Button variant="outline" size="sm" onClick={handleSelectAll} className="h-8 px-2 text-xs">
+                                            <span className="hidden sm:inline">{selectedUrls.size === media.length ? "Deselect all" : "Select all"}</span>
+                                            <span className="sm:hidden">{selectedUrls.size === media.length ? "None" : "All"}</span>
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            disabled={selectedUrls.size === 0}
+                                            onClick={() => setIsBulkDeleteOpen(true)}
+                                            className="h-8 w-8 sm:w-auto p-0 sm:px-3 justify-center"
+                                            title="Delete Selected"
+                                        >
+                                            <Trash2 className="h-4 w-4 sm:mr-1" />
+                                            <span className="hidden sm:inline">Delete selected</span>
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={handleExitSelectionMode} className="h-8 w-8 p-0 justify-center">
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
                             ) : (
-                                <Upload className="h-4 w-4 mr-2" />
+                                <div className="flex justify-end w-full sm:w-auto">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsSelectionMode(true)}
+                                        disabled={media.length === 0}
+                                        className="h-8 w-full sm:w-auto"
+                                    >
+                                        <CheckSquare className="h-4 w-4 mr-1" />
+                                        Select
+                                    </Button>
+                                </div>
                             )}
-                            Upload media
-                        </Button>
-                    )}
-                </div>
-            )}
-
-            {/* Media grid */}
-            {media.length > 0 && (
-                <>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                        {media.map((item) => (
-                            <MediaCard
-                                key={item.id}
-                                item={item}
-                                isSelected={selectedUrls.has(item.url)}
-                                isSelectionMode={isSelectionMode}
-                                onSelect={() => handleToggleSelection(item.url)}
-                                onDelete={() => handleDeleteRequest(item)}
-                                onPreview={() => setPreviewItem(item)}
-                            />
-                        ))}
+                        </div>
                     </div>
 
-                    {/* Load more */}
-                    {hasMore && (
-                        <div className="flex justify-center mt-8">
-                            <Button
-                                variant="outline"
-                                onClick={loadMore}
-                                disabled={isLoading}
-                            >
-                                {isLoading ? (
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : null}
-                                Load more
-                            </Button>
+                    {/* Error state */}
+                    {error && (
+                        <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 mb-6">
+                            <p className="text-sm font-medium text-destructive">{error}</p>
                         </div>
                     )}
-                </>
-            )}
 
-            {/* Preview modal */}
-            <MediaPreviewModal
-                item={previewItem}
-                isOpen={!!previewItem}
-                onClose={() => setPreviewItem(null)}
-                onRename={(name) => {
-                    if (previewItem) {
-                        renameMedia(previewItem.id, name)
-                        setPreviewItem({ ...previewItem, filename: name })
-                    }
-                }}
-                onDelete={() => {
-                    if (previewItem) {
-                        const item = previewItem
-                        // Close the preview before opening the confirm dialog so we
-                        // never stack two Radix dialogs (competing focus traps).
-                        setPreviewItem(null)
-                        handleDeleteRequest(item)
-                    }
-                }}
-            />
-
-            {/* Single delete confirmation */}
-            <Dialog
-                open={!!deleteConfirmItem}
-                onOpenChange={(open) => !open && setDeleteConfirmItem(null)}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete "{deleteConfirmItem?.filename}"?</DialogTitle>
-                        <DialogDescription asChild>
-                            <div>
-                                {isLoadingNotes ? (
-                                    <div className="flex items-center gap-2 py-2">
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        <span>Checking usage...</span>
+                    {/* Loading state */}
+                    {isLoading && media.length === 0 && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                            {Array.from({ length: 12 }).map((_, i) => (
+                                <div key={i} className="rounded-xl border bg-card overflow-hidden">
+                                    <div className="aspect-square animate-pulse bg-muted" />
+                                    <div className="p-3 space-y-2">
+                                        <div className="h-3.5 w-3/4 animate-pulse rounded bg-muted" />
+                                        <div className="h-3 w-1/3 animate-pulse rounded bg-muted" />
                                     </div>
-                                ) : affectedNotes.length > 0 ? (
-                                    <div className="space-y-2">
-                                        <p className="text-amber-600 dark:text-amber-400 font-medium">
-                                            ⚠️ This file is used in {affectedNotes.length} note(s):
-                                        </p>
-                                        <ul className="list-disc list-inside text-sm pl-2 max-h-32 overflow-y-auto">
-                                            {affectedNotes.map(note => (
-                                                <li key={note.id}>{note.title || "Untitled"}</li>
-                                            ))}
-                                        </ul>
-                                        <p className="text-sm">Deleting will remove this media from all these notes.</p>
-                                    </div>
-                                ) : (
-                                    <p>Are you sure you want to delete this file? This action cannot be undone.</p>
-                                )}
-                            </div>
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => { setDeleteConfirmItem(null); setAffectedNotes([]); }}
-                            disabled={isDeleting}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={handleDeleteSingle}
-                            disabled={isDeleting}
-                        >
-                            {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            Delete
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
-            {/* Bulk delete confirmation */}
-            <Dialog open={isBulkDeleteOpen} onOpenChange={setIsBulkDeleteOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete {selectedUrls.size} file(s)?</DialogTitle>
-                        <DialogDescription asChild>
-                            <div className="space-y-3">
-                                <p>Are you sure you want to delete these files? This action cannot be undone.</p>
-                                <p className="text-amber-600 dark:text-amber-400 font-medium flex items-center gap-2">
-                                    ⚠️ Any notes using these files will have them removed automatically.
+                    {/* Empty state */}
+                    {!isLoading && media.length === 0 && (
+                        <div className="flex flex-col items-center justify-center gap-5 rounded-xl border border-dashed py-16 text-center">
+                            <span className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                                <FolderOpen className="size-7" />
+                            </span>
+                            <div className="max-w-md space-y-1.5">
+                                <p className="text-lg font-semibold">No media files</p>
+                                <p className="text-sm text-muted-foreground">
+                                    {fileType
+                                        ? `No ${fileType.toLowerCase()} files found. Try a different filter.`
+                                        : "Upload media here, or add it from within your notes — it'll all show up in one place."}
                                 </p>
                             </div>
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => setIsBulkDeleteOpen(false)}
-                            disabled={isDeleting}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={handleBulkDelete}
-                            disabled={isDeleting}
-                        >
-                            {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            Delete all
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                            {!fileType && (
+                                <Button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUploading}
+                                >
+                                    {isUploading ? (
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                        <Upload className="h-4 w-4 mr-2" />
+                                    )}
+                                    Upload media
+                                </Button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Media grid */}
+                    {media.length > 0 && (
+                        <>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                                {media.map((item) => (
+                                    <MediaCard
+                                        key={item.id}
+                                        item={item}
+                                        isSelected={selectedUrls.has(item.url)}
+                                        isSelectionMode={isSelectionMode}
+                                        onSelect={() => handleToggleSelection(item.url)}
+                                        onDelete={() => handleDeleteRequest(item)}
+                                        onPreview={() => setPreviewItem(item)}
+                                    />
+                                ))}
+                            </div>
+
+                            {/* Load more */}
+                            {hasMore && (
+                                <div className="flex justify-center mt-8">
+                                    <Button
+                                        variant="outline"
+                                        onClick={loadMore}
+                                        disabled={isLoading}
+                                    >
+                                        {isLoading ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : null}
+                                        Load more
+                                    </Button>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {/* Preview modal */}
+                    <MediaPreviewModal
+                        item={previewItem}
+                        isOpen={!!previewItem}
+                        onClose={() => setPreviewItem(null)}
+                        onRename={(name) => {
+                            if (previewItem) {
+                                renameMedia(previewItem.id, name)
+                                setPreviewItem({ ...previewItem, filename: name })
+                            }
+                        }}
+                        onDelete={() => {
+                            if (previewItem) {
+                                const item = previewItem
+                                // Close the preview before opening the confirm dialog so we
+                                // never stack two Radix dialogs (competing focus traps).
+                                setPreviewItem(null)
+                                handleDeleteRequest(item)
+                            }
+                        }}
+                    />
+
+                    {/* Single delete confirmation */}
+                    <Dialog
+                        open={!!deleteConfirmItem}
+                        onOpenChange={(open) => !open && setDeleteConfirmItem(null)}
+                    >
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Delete &quot;{deleteConfirmItem?.filename}&quot;?</DialogTitle>
+                                <DialogDescription asChild>
+                                    <div>
+                                        {isLoadingNotes ? (
+                                            <div className="flex items-center gap-2 py-2">
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                <span>Checking usage...</span>
+                                            </div>
+                                        ) : affectedNotes.length > 0 ? (
+                                            <div className="space-y-2">
+                                                <p className="text-amber-600 dark:text-amber-400 font-medium">
+                                                    ⚠️ This file is used in {affectedNotes.length} note(s):
+                                                </p>
+                                                <ul className="list-disc list-inside text-sm pl-2 max-h-32 overflow-y-auto">
+                                                    {affectedNotes.map(note => (
+                                                        <li key={note.id}>{note.title || "Untitled"}</li>
+                                                    ))}
+                                                </ul>
+                                                <p className="text-sm">Deleting will remove this media from all these notes.</p>
+                                            </div>
+                                        ) : (
+                                            <p>Are you sure you want to delete this file? This action cannot be undone.</p>
+                                        )}
+                                    </div>
+                                </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => { setDeleteConfirmItem(null); setAffectedNotes([]); }}
+                                    disabled={isDeleting}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    onClick={handleDeleteSingle}
+                                    disabled={isDeleting}
+                                >
+                                    {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                    Delete
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
+                    {/* Bulk delete confirmation */}
+                    <Dialog open={isBulkDeleteOpen} onOpenChange={setIsBulkDeleteOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Delete {selectedUrls.size} file(s)?</DialogTitle>
+                                <DialogDescription asChild>
+                                    <div className="space-y-3">
+                                        <p>Are you sure you want to delete these files? This action cannot be undone.</p>
+                                        <p className="text-amber-600 dark:text-amber-400 font-medium flex items-center gap-2">
+                                            ⚠️ Any notes using these files will have them removed automatically.
+                                        </p>
+                                    </div>
+                                </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setIsBulkDeleteOpen(false)}
+                                    disabled={isDeleting}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    onClick={handleBulkDelete}
+                                    disabled={isDeleting}
+                                >
+                                    {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                    Delete all
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                </div>
             </div>
         </div>
     )

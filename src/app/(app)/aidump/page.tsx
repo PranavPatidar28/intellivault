@@ -65,7 +65,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Topbar } from "@/components/Topbar";
 import { useAIDump } from "@/hooks/use-ai-dump";
 import type { DraftSummary, AIDumpData } from "@/hooks/use-ai-dump";
 import { useFileUpload, SUPPORTED_FILE_TYPES } from "@/hooks/use-file-upload";
@@ -232,7 +232,7 @@ export default function AIDumpPage() {
     }, []);
 
     // Resizable right sidebar
-    const { width: rightPanelWidth, handleMouseDown: handleRightPanelResize } = useResizablePanel(280, 220, 400);
+    const { width: rightPanelWidth, handleMouseDown: handleRightPanelResize } = useResizablePanel(300, 280, 400);
 
     const {
         aiDump,
@@ -498,25 +498,17 @@ export default function AIDumpPage() {
     return (
         <div className="flex flex-col h-full bg-background">
             {/* Header */}
-            <header className="flex items-center justify-between px-4 md:px-6 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
-                <div className="flex items-center gap-2 md:gap-4 min-w-0">
-                    {/* Mobile nav trigger — this page has a custom layout, so the
-                        shared sidebar is otherwise unreachable on small screens. */}
-                    <SidebarTrigger className="md:hidden" />
-                    <Link href="/dashboard" onClick={handleBackNavigation}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to dashboard">
-                            <ArrowLeft className="h-4 w-4" />
-                        </Button>
-                    </Link>
-                    <div className="min-w-0">
-                        <h1 className="text-lg font-semibold flex items-center gap-2 truncate">
-                            <Wand2 className="h-4 w-4 text-primary flex-shrink-0" />
-                            AI Dump
-                        </h1>
-                    </div>
+            <Topbar>
+                <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+                    <h1 className="text-lg font-semibold flex items-center gap-2 truncate tracking-tight">
+                        <span className="hidden sm:flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
+                            <Wand2 className="h-4 w-4" />
+                        </span>
+                        AI Dump
+                    </h1>
                 </div>
 
-                <div className="flex items-center gap-1.5 md:gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                     {/* Streaming Status Badge */}
                     {streamingStatus && (
                         <Badge variant="secondary" className="gap-1.5 animate-pulse hidden sm:flex" role="status" aria-live="polite">
@@ -527,7 +519,7 @@ export default function AIDumpPage() {
 
                     {/* Stop / cancel an in-flight generation */}
                     {isGenerating && (
-                        <Button variant="outline" size="sm" onClick={cancel} className="gap-1.5 text-xs">
+                        <Button variant="outline" onClick={cancel} className="gap-1.5 text-xs">
                             <Square className="h-3 w-3 fill-current" />
                             Stop
                         </Button>
@@ -537,7 +529,7 @@ export default function AIDumpPage() {
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 lg:hidden"
+                        className="lg:hidden"
                         aria-label="Open options"
                         onClick={() => setOptionsSheetOpen(true)}
                     >
@@ -547,7 +539,7 @@ export default function AIDumpPage() {
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 lg:hidden"
+                            className="lg:hidden"
                             aria-label="Open title, tags and summary"
                             onClick={() => setMetadataSheetOpen(true)}
                         >
@@ -557,17 +549,18 @@ export default function AIDumpPage() {
 
                     {aiDump && (
                         <>
-                            <Button variant="ghost" size="sm" onClick={handleReset} className="gap-1.5 text-xs">
+                            <Button variant="ghost" onClick={handleReset} className="gap-1.5 text-xs h-9 w-9 sm:w-auto p-0 sm:px-3 justify-center" title="Reset">
                                 <RotateCcw className="h-3 w-3" />
                                 <span className="hidden sm:inline">Reset</span>
                             </Button>
-                            <Button size="sm" onClick={handleSave} disabled={isProcessing || !selectedTitle.trim()} className="gap-1.5">
-                                Save Note
+                            <Button onClick={handleSave} disabled={isProcessing || !selectedTitle.trim()} className="h-9 w-9 sm:w-auto p-0 sm:px-3 justify-center gap-1.5" title="Save Note">
+                                <Check className="h-4 w-4" />
+                                <span className="hidden sm:inline">Save Note</span>
                             </Button>
                         </>
                     )}
                 </div>
-            </header>
+            </Topbar>
 
             {/* Main Content - 3 Column Layout (lg+); stacks to a single column below lg. */}
             <div className="flex-1 flex flex-col lg:flex-row min-h-0">
@@ -625,10 +618,10 @@ export default function AIDumpPage() {
                                     onDragOver={handleDragOver}
                                     onDrop={handleDrop}
                                     className={cn(
-                                        "relative flex-1 min-h-[300px] border-2 border-dashed rounded-lg transition-all",
+                                        "relative flex-1 min-h-[300px] rounded-xl transition-all",
                                         isDragging
-                                            ? "border-primary bg-primary/5"
-                                            : "border-muted hover:border-muted-foreground/30"
+                                            ? "border-2 border-dashed border-primary bg-primary/5"
+                                            : "border border-border/60"
                                     )}
                                 >
                                     {/* Drag overlay */}
@@ -714,7 +707,7 @@ export default function AIDumpPage() {
                                             <Upload className="h-4 w-4" />
                                             Upload
                                         </Button>
-                                        <div className="text-xs text-muted-foreground space-x-3">
+                                        <div className="hidden sm:flex items-center text-xs text-muted-foreground gap-2">
                                             <span>{inputContent.length} chars</span>
                                             <span>•</span>
                                             <span>{wordCount} words</span>
@@ -727,7 +720,7 @@ export default function AIDumpPage() {
                                     >
                                         <Wand2 className="h-4 w-4" />
                                         Run AI Dump
-                                        <kbd className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary-foreground/20 rounded font-mono">
+                                        <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs bg-primary-foreground/20 rounded font-mono">
                                             {isApple ? "⌘↵" : "Ctrl ↵"}
                                         </kbd>
                                     </Button>
@@ -750,7 +743,7 @@ export default function AIDumpPage() {
                                                     <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
                                                 )}
                                             </div>
-                                            <span className="text-[10px] text-muted-foreground">
+                                            <span className="text-xs text-muted-foreground">
                                                 Drafts auto-delete after 7 days
                                             </span>
                                         </div>
@@ -768,11 +761,11 @@ export default function AIDumpPage() {
                                                             {draft.title || "Untitled draft"}
                                                         </p>
                                                         {draft.tldr && (
-                                                            <p className="text-[11px] text-muted-foreground truncate">
+                                                            <p className="text-xs text-muted-foreground truncate">
                                                                 {draft.tldr}
                                                             </p>
                                                         )}
-                                                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                        <p className="text-xs text-muted-foreground mt-0.5">
                                                             {getRelativeTime(draft.updatedAt)}
                                                         </p>
                                                     </button>
@@ -819,7 +812,7 @@ export default function AIDumpPage() {
                                 <div className="flex items-center gap-1">
                                     {/* Output size indicator */}
                                     {hasMarkdown && previewTab === "generated" && !isProcessing && (
-                                        <span className="text-[10px] text-muted-foreground mr-2 font-mono">
+                                        <span className="text-xs text-muted-foreground mr-2 font-mono">
                                             {(() => {
                                                 const md = editedMarkdown || aiDump?.markdown || "";
                                                 const words = md.trim().split(/\s+/).filter(Boolean).length;
@@ -858,7 +851,7 @@ export default function AIDumpPage() {
                                             onClick={() => copyToClipboard(editedMarkdown || aiDump!.markdown, "markdown")}
                                         >
                                             {copiedSection === "markdown" ? (
-                                                <Check className="h-3 w-3 mr-1 text-green-500" />
+                                                <Check className="h-3 w-3 mr-1 text-success" />
                                             ) : (
                                                 <Copy className="h-3 w-3 mr-1" />
                                             )}
@@ -904,7 +897,7 @@ export default function AIDumpPage() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
-                                                                className="h-6 text-[11px] gap-1 flex-shrink-0"
+                                                                className="h-6 text-xs gap-1 flex-shrink-0"
                                                                 onClick={() => setEditedMarkdown(aiDump.markdown)}
                                                             >
                                                                 <RotateCcw className="h-3 w-3" />
@@ -1025,18 +1018,18 @@ export default function AIDumpPage() {
                                     {hasMarkdown ? (
                                         <div className="p-6 space-y-4">
                                             <div>
-                                                <Badge variant="outline" className="mb-2 text-xs bg-red-500/10 text-red-600 border-red-200">
+                                                <Badge variant="outline" className="mb-2 text-xs bg-destructive/10 text-destructive border-destructive/30">
                                                     Original ({inputContent.length} chars)
                                                 </Badge>
-                                                <pre className="text-xs font-mono whitespace-pre-wrap text-muted-foreground max-h-40 overflow-auto bg-muted/50 rounded p-2">
+                                                <pre className="text-xs font-mono whitespace-pre-wrap text-muted-foreground max-h-40 overflow-auto bg-muted/50 rounded-md p-2">
                                                     {inputContent.slice(0, 500)}{inputContent.length > 500 ? "..." : ""}
                                                 </pre>
                                             </div>
                                             <div>
-                                                <Badge variant="outline" className="mb-2 text-xs bg-green-500/10 text-green-600 border-green-200">
+                                                <Badge variant="outline" className="mb-2 text-xs bg-success/10 text-success border-success/30">
                                                     Generated ({aiDump!.markdown.length} chars)
                                                 </Badge>
-                                                <pre className="text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto bg-muted/50 rounded p-2">
+                                                <pre className="text-xs font-mono whitespace-pre-wrap max-h-40 overflow-auto bg-muted/50 rounded-md p-2">
                                                     {aiDump!.markdown.slice(0, 500)}{aiDump!.markdown.length > 500 ? "..." : ""}
                                                 </pre>
                                             </div>
@@ -1065,7 +1058,7 @@ export default function AIDumpPage() {
 
                 {/* Right Panel - Metadata & Actions (desktop inline; mobile in a Sheet) */}
                 <aside
-                    className="hidden lg:block flex-shrink-0 overflow-auto bg-muted/10"
+                    className="hidden lg:block flex-shrink-0 overflow-auto no-scrollbar bg-muted/10"
                     style={{ width: rightPanelWidth }}
                 >
                     <MetadataPanel
@@ -1112,7 +1105,7 @@ export default function AIDumpPage() {
 
             {/* Mobile: Metadata panel in a right Sheet */}
             <Sheet open={metadataSheetOpen} onOpenChange={setMetadataSheetOpen}>
-                <SheetContent side="right" className="w-[88vw] max-w-[340px] overflow-auto p-0 lg:hidden">
+                <SheetContent side="right" className="w-[88vw] max-w-[340px] overflow-auto no-scrollbar p-0 lg:hidden">
                     <SheetHeader className="px-4 pt-4 pb-0">
                         <SheetTitle className="flex items-center gap-2 text-sm">
                             <PanelRight className="h-4 w-4 text-primary" />
@@ -1235,7 +1228,7 @@ function OptionsPanel({
                         </SelectItem>
                         <SelectItem value="research">
                             <span className="flex items-center gap-2">
-                                <BookOpen className="h-3.5 w-3.5 text-green-500" />
+                                <BookOpen className="h-3.5 w-3.5 text-success" />
                                 Research Notes
                             </span>
                         </SelectItem>
@@ -1272,7 +1265,7 @@ function OptionsPanel({
                     </SelectContent>
                 </Select>
                 {/* Template description */}
-                <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
+                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
                     {options.template === "auto" && "AI will analyze content and choose the best format."}
                     {options.template === "meeting" && "Extracts attendees, decisions, and action items."}
                     {options.template === "research" && "Organizes findings with sources and methodology."}
@@ -1287,7 +1280,7 @@ function OptionsPanel({
                     <div className="mt-3 flex items-center gap-2">
                         <Badge
                             variant="secondary"
-                            className={cn("text-[10px] gap-1", getContentTypeDisplay(detectedContentType.type).color)}
+                            className={cn("text-xs gap-1", getContentTypeDisplay(detectedContentType.type).color)}
                         >
                             <Zap className="h-2.5 w-2.5" />
                             Detected: {getContentTypeDisplay(detectedContentType.type).label}
@@ -1297,7 +1290,7 @@ function OptionsPanel({
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-5 text-[10px] px-2"
+                                    className="h-5 text-xs px-2"
                                     onClick={() => handleOptionsChange({ template: detectedContentType.suggestedTemplate as AIDumpOptions["template"] })}
                                 >
                                     Use
@@ -1397,7 +1390,7 @@ function OptionsPanel({
                     }`}
                     className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
                 />
-                <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
                     <span>Precise</span>
                     <span>Creative</span>
                 </div>
@@ -1527,7 +1520,7 @@ function MetadataPanel({
                                     )}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <Badge variant="secondary" className="text-[9px] mb-1 capitalize">
+                                    <Badge variant="secondary" className="text-xs mb-1 capitalize">
                                         {title.variant}
                                     </Badge>
                                     <p className="text-xs leading-snug">{title.text}</p>
@@ -1647,12 +1640,12 @@ function MetadataPanel({
                                             {(action.assignee || action.due_date) && (
                                                 <div className="mt-1 flex flex-wrap gap-1">
                                                     {action.assignee && (
-                                                        <Badge variant="secondary" className="text-[9px]">
+                                                        <Badge variant="secondary" className="text-xs">
                                                             {action.assignee}
                                                         </Badge>
                                                     )}
                                                     {action.due_date && (
-                                                        <Badge variant="outline" className="text-[9px]">
+                                                        <Badge variant="outline" className="text-xs">
                                                             {action.due_date}
                                                         </Badge>
                                                     )}
@@ -1691,7 +1684,7 @@ function MetadataPanel({
                         disabled={!hasMarkdown}
                     >
                         {copiedSection === "all" ? (
-                            <Check className="h-3 w-3 text-green-500" />
+                            <Check className="h-3 w-3 text-success" />
                         ) : (
                             <Copy className="h-3 w-3" />
                         )}

@@ -36,6 +36,67 @@ export function markdownToTipTap(markdown: string): TipTapDocument {
             continue;
         }
 
+        // Table
+        if (trimmed.includes("|") && i + 1 < lines.length) {
+            const nextLineTrimmed = lines[i + 1].trim();
+            const isSeparator = /^[\s|:\-]+$/.test(nextLineTrimmed) && nextLineTrimmed.includes("-") && nextLineTrimmed.includes("|");
+            if (isSeparator) {
+                const tableRows: TipTapNode[] = [];
+                
+                // Parse headers
+                const headers = parseTableRow(line);
+                const headerRowContent = headers.map(headerText => ({
+                    type: "tableHeader",
+                    attrs: { colspan: 1, rowspan: 1, colwidth: null },
+                    content: [
+                        {
+                            type: "paragraph",
+                            content: parseInlineContent(headerText),
+                        }
+                    ]
+                }));
+                tableRows.push({
+                    type: "tableRow",
+                    content: headerRowContent,
+                });
+
+                // Skip header line and separator line
+                i += 2;
+
+                // Parse body rows
+                while (i < lines.length) {
+                    const rowLine = lines[i];
+                    const rowLineTrimmed = rowLine.trim();
+                    if (!rowLineTrimmed || !rowLineTrimmed.includes("|")) {
+                        break;
+                    }
+                    const cells = parseTableRow(rowLine);
+                    const rowCellsContent = cells.map(cellText => ({
+                        type: "tableCell",
+                        attrs: { colspan: 1, rowspan: 1, colwidth: null },
+                        content: [
+                            {
+                                type: "paragraph",
+                                content: parseInlineContent(cellText),
+                            }
+                        ]
+                    }));
+                    
+                    tableRows.push({
+                        type: "tableRow",
+                        content: rowCellsContent,
+                    });
+                    i++;
+                }
+
+                content.push({
+                    type: "table",
+                    content: tableRows,
+                });
+                continue;
+            }
+        }
+
         // Headings
         const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
         if (headingMatch) {
@@ -270,4 +331,19 @@ export function stripCodeFences(content: string): string {
     }
 
     return processed;
+}
+
+/**
+ * Parse a markdown table row line into trimmed cell strings
+ */
+function parseTableRow(line: string): string[] {
+    const trimmed = line.trim();
+    let content = trimmed;
+    if (content.startsWith("|")) {
+        content = content.slice(1);
+    }
+    if (content.endsWith("|")) {
+        content = content.slice(0, -1);
+    }
+    return content.split("|").map(cell => cell.trim());
 }

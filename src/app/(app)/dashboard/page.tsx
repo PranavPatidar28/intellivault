@@ -1,6 +1,6 @@
+/* eslint-disable react-hooks/purity */
 import Link from "next/link";
 import {
-  ArrowRight,
   FileText,
   Image as ImageIcon,
   Pin,
@@ -19,13 +19,14 @@ import {
 } from "@/components/ui/card";
 import { requireAuth } from "@/lib/session";
 import prisma from "@/lib/prisma";
-import { getTextColorForBackground } from "@/lib/utils/tagColors";
 import {
   NotesActivityChart,
   type ActivityPoint,
 } from "@/components/dashboard/NotesActivityChart";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { DashboardEmptyState } from "@/components/dashboard/DashboardEmptyState";
+import { QuickCaptureCard } from "@/components/dashboard/QuickCaptureCard";
+import { DashboardRecentNotes } from "@/components/dashboard/DashboardRecentNotes";
 
 const ACTIVITY_DAYS = 30;
 
@@ -39,21 +40,13 @@ function formatDayLabel(date: Date): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function formatRelative(date: Date): string {
-  const diffMs = Date.now() - date.getTime();
-  const diffMins = Math.round(diffMs / 60000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60)
-    return `${diffMins} min${diffMins === 1 ? "" : "s"} ago`;
-  const diffHours = Math.round(diffMins / 60);
-  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
-  const diffDays = Math.round(diffHours / 24);
-  if (diffDays < 30) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function formatBytes(bytes: number, decimals = 1): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
 }
 
 export default async function DashboardPage() {
@@ -61,8 +54,8 @@ export default async function DashboardPage() {
   // here so the redirect logic lives in one place (no duplicate inline check).
   const session = await requireAuth();
   const userId = session.user.id;
-  const greetingName =
-    session.user.name?.trim() || session.user.email || "back";
+  const rawName = session.user.name?.trim();
+  const greetingName = rawName ? rawName.split(/\s+/)[0] : (session.user.email || "back");
 
   const since30 = startOfDay(
     new Date(Date.now() - (ACTIVITY_DAYS - 1) * 24 * 60 * 60 * 1000)
@@ -79,6 +72,7 @@ export default async function DashboardPage() {
     recentNotes,
     activityNotes,
     topTags,
+    mediaSizeResult,
   ] = await Promise.all([
     prisma.note.count({ where: { userId, status: { not: "ARCHIVED" } } }),
     prisma.mediaAttachment.count({ where: { userId } }),
@@ -108,8 +102,16 @@ export default async function DashboardPage() {
         id: true,
         title: true,
         generatedTitle: true,
+        contentText: true,
         updatedAt: true,
         isPinned: true,
+        tags: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+          },
+        },
       },
     }),
     prisma.note.findMany({
@@ -130,6 +132,10 @@ export default async function DashboardPage() {
         color: true,
         _count: { select: { notes: true } },
       },
+    }),
+    prisma.mediaAttachment.aggregate({
+      where: { userId },
+      _sum: { size: true },
     }),
   ]);
 
@@ -163,80 +169,114 @@ export default async function DashboardPage() {
 
   const tagsWithNotes = topTags.filter((tag) => tag._count.notes > 0);
 
+  // Sub-metrics formatting
+  const maxNotesLimit = 10000;
+  const notesLimitProgress = Math.min(100, (totalNotes / maxNotesLimit) * 100);
+
+  const totalMediaSize = mediaSizeResult._sum.size || 0;
+  const storageLimitBytes = 50 * 1024 * 1024; // 50 MB Free tier
+  const storageProgress = Math.min(100, (totalMediaSize / storageLimitBytes) * 100);
+
+  const topTagName = topTags[0]?.name;
+  const topTagCount = topTags[0]?._count.notes || 0;
+  const topTagSubtitle = topTagCount > 0 ? `Most used: #${topTagName}` : undefined;
+
   return (
-    <div className="flex h-full flex-col">
-      <Topbar className="flex-shrink-0">
-        <h1 className="p-2 text-lg font-semibold">Dashboard</h1>
-        <div className="flex items-center gap-2 pr-1">
-          <Button asChild size="sm" variant="outline">
-            <Link href="/aidump">
-              <Sparkles className="size-4" />
-              <span className="hidden sm:inline">AI Dump</span>
-            </Link>
-          </Button>
-          <Button asChild size="sm">
+    <div className="flex h-full flex-col bg-background/40">
+      <Topbar>
+        <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+          <h1 className="text-lg font-semibold tracking-tight">
+            Dashboard
+          </h1>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button asChild size="sm" variant="outline" className="border-border/60 bg-background/50">
             <Link href="/notes">
               <FileText className="size-4" />
               <span className="hidden sm:inline">New note</span>
+            </Link>
+          </Button>
+          <Button asChild size="sm" className="bg-primary/95 text-primary-foreground hover:bg-primary shadow-xs">
+            <Link href="/aidump">
+              <Sparkles className="size-4" />
+              <span className="hidden sm:inline">AI Dump</span>
             </Link>
           </Button>
         </div>
       </Topbar>
 
       <div className="h-full overflow-y-auto">
-        <div className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">
-              Welcome back, {greetingName}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Here&apos;s what&apos;s happening across your vault.
-            </p>
+        <div className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6 lg:space-y-6">
+          
+          {/* Enhanced Welcome Banner */}
+          <div className="relative overflow-hidden rounded-xl border border-border/40 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 sm:p-6 shadow-xs">
+            <div className="absolute top-0 right-0 -z-10 h-32 w-32 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
+            <div className="space-y-1 min-w-0">
+              <h2 className="text-xl font-extrabold tracking-tight sm:text-3xl text-foreground truncate max-w-full" title={`Welcome back, ${greetingName}`}>
+                Welcome back, {greetingName}
+              </h2>
+            </div>
           </div>
 
           {isEmpty ? (
             <DashboardEmptyState name={greetingName} />
           ) : (
-            <>
-              {/* Summary stats */}
-              <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
-                <StatCard
-                  label="Notes"
-                  value={totalNotes}
-                  icon={FileText}
-                  accent={1}
-                  hint={
-                    notesLast7 > 0
-                      ? `+${notesLast7} in the last 7 days`
-                      : "No new notes this week"
-                  }
-                />
-                <StatCard
-                  label="Media files"
-                  value={totalMedia}
-                  icon={ImageIcon}
-                  accent={2}
-                />
-                <StatCard
-                  label="Tags"
-                  value={totalTags}
-                  icon={Tags}
-                  accent={3}
-                />
-                <StatCard
-                  label="Pinned"
-                  value={pinnedCount}
-                  icon={Pin}
-                  accent={4}
-                />
-              </div>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+              
+              {/* Left Column: KPI Stats + Activity Chart + Quick Capture */}
+              <div className="space-y-6 lg:col-span-2">
+                
+                {/* Summary stats grid */}
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <StatCard
+                    label="Notes"
+                    value={totalNotes}
+                    icon={FileText}
+                    accent={1}
+                    progress={notesLimitProgress}
+                    subtitle={`Limit: ${totalNotes.toLocaleString()} / ${maxNotesLimit.toLocaleString()} notes`}
+                    hint={
+                      notesLast7 > 0
+                        ? `+${notesLast7} in the last 7 days`
+                        : "No new notes this week"
+                    }
+                  />
+                  <StatCard
+                    label="Media files"
+                    value={totalMedia}
+                    icon={ImageIcon}
+                    accent={2}
+                    progress={storageProgress}
+                    subtitle={`Storage used: ${formatBytes(totalMediaSize)} / 50 MB`}
+                  />
+                  <StatCard
+                    label="Tags"
+                    value={totalTags}
+                    icon={Tags}
+                    accent={3}
+                    subtitle={topTagSubtitle}
+                    hint={topTagCount > 0 ? `Used in ${topTagCount} notes` : undefined}
+                  />
+                  <StatCard
+                    label="Pinned"
+                    value={pinnedCount}
+                    icon={Pin}
+                    accent={4}
+                    subtitle="Quick access items"
+                    hint="Pinned notes stay at top"
+                  />
+                </div>
 
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                {/* Activity chart */}
-                <Card className="lg:col-span-2">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="size-4 text-muted-foreground" />
+                {/* Quick Capture Card */}
+                <QuickCaptureCard availableTags={topTags} />
+
+                {/* Activity chart card */}
+                <Card className="border-border/50 bg-card/60 shadow-md backdrop-blur-md transition-shadow hover:shadow-lg">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                      <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <TrendingUp className="size-4" />
+                      </span>
                       Notes created
                     </CardTitle>
                     <CardDescription>
@@ -248,108 +288,59 @@ export default async function DashboardPage() {
                     <NotesActivityChart data={activityData} />
                   </CardContent>
                 </Card>
-
-                {/* Recent notes */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Recent notes</CardTitle>
-                    <CardDescription>Your latest activity</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {recentNotes.length === 0 ? (
-                      <p className="py-6 text-center text-sm text-muted-foreground">
-                        No notes yet.
-                      </p>
-                    ) : (
-                      <ul className="space-y-1">
-                        {recentNotes.map((note) => {
-                          const title =
-                            note.title?.trim() ||
-                            note.generatedTitle?.trim() ||
-                            "Untitled note";
-                          return (
-                            <li key={note.id}>
-                              <Link
-                                href={`/notes/${note.id}`}
-                                className="group flex items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                              >
-                                {note.isPinned ? (
-                                  <Pin className="size-3.5 shrink-0 text-muted-foreground" />
-                                ) : (
-                                  <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                                )}
-                                <span className="min-w-0 flex-1 truncate font-medium">
-                                  {title}
-                                </span>
-                                <span className="shrink-0 text-xs text-muted-foreground">
-                                  {formatRelative(note.updatedAt)}
-                                </span>
-                              </Link>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    <Button
-                      asChild
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2 w-full justify-between"
-                    >
-                      <Link href="/notes">
-                        View all notes
-                        <ArrowRight className="size-4" />
-                      </Link>
-                    </Button>
-                  </CardContent>
-                </Card>
               </div>
 
-              {/* Top tags */}
-              {tagsWithNotes.length > 0 ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Top tags</CardTitle>
-                    <CardDescription>
-                      Your most-used tags by note count
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {tagsWithNotes.map((tag) => (
-                        <Link
-                          key={tag.id}
-                          href={`/tags?id=${tag.id}`}
-                          className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <span
-                            className="inline-flex items-center rounded-full px-1.5 text-xs font-medium"
-                            style={
-                              tag.color
-                                ? {
-                                    backgroundColor: tag.color,
-                                    color: getTextColorForBackground(
-                                      tag.color
-                                    ),
-                                  }
-                                : undefined
-                            }
+              {/* Right Column: Recent Notes + Top Tags */}
+              <div className="space-y-6">
+                
+                {/* Recent notes card */}
+                <DashboardRecentNotes initialNotes={recentNotes} />
+
+                {/* Top tags card */}
+                {tagsWithNotes.length > 0 ? (
+                  <Card className="border-border/50 bg-card/60 shadow-md backdrop-blur-md transition-shadow hover:shadow-lg">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base font-semibold">
+                        Top tags
+                      </CardTitle>
+                      <CardDescription>
+                        Your most-used tags by note count
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {tagsWithNotes.map((tag) => (
+                          <Link
+                            key={tag.id}
+                            href={`/tags?id=${tag.id}`}
+                            className="group inline-flex items-center gap-2 rounded-full border border-border/40 bg-background/50 py-1 pl-2.5 pr-1.5 text-xs font-semibold shadow-2xs transition-all hover:-translate-y-0.5 hover:border-ring/30 hover:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
-                            {tag.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground tabular-nums">
-                            {tag._count.notes}
-                          </span>
-                        </Link>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : null}
-            </>
+                            <span
+                              className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+                              style={
+                                tag.color
+                                  ? { backgroundColor: tag.color }
+                                  : { backgroundColor: "var(--muted-foreground)" }
+                              }
+                              aria-hidden="true"
+                            />
+                            <span className="truncate">{tag.name}</span>
+                            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1.5 text-[10px] font-bold text-muted-foreground tabular-nums">
+                              {tag._count.notes}
+                            </span>
+                          </Link>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+              </div>
+
+            </div>
           )}
         </div>
       </div>
     </div>
   );
 }
+

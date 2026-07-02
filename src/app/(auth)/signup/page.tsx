@@ -104,125 +104,131 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Sign Up</CardTitle>
-        </CardHeader>
+    <Card className="w-full max-w-md shadow-lg">
+      <CardHeader className="space-y-1 text-center">
+        <CardTitle className="text-2xl font-bold tracking-tight">
+          Create your vault
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Start capturing and organizing your ideas
+        </p>
+      </CardHeader>
 
-        <CardContent>
-          {authError && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{authError}</AlertDescription>
-            </Alert>
-          )}
+      <CardContent>
+        {authError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{authError}</AlertDescription>
+          </Alert>
+        )}
 
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(handleSignUp)}
-              className="space-y-4"
-              noValidate
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(handleSignUp)}
+            className="space-y-4"
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      placeholder="Your Name"
+                      autoComplete="name"
+                      disabled={isLoading}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      disabled={isLoading}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <PasswordInput
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      disabled={isLoading}
+                      {...field}
+                    >
+                      <PasswordInputStrengthChecker />
+                    </PasswordInput>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              disabled={isLoading}
             >
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="text"
-                        placeholder="Your Name"
-                        autoComplete="name"
-                        disabled={isLoading}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {isLoading ? (
+                <>
+                  <Spinner className="mr-2" />
+                  Signing Up...
+                </>
+              ) : (
+                "Sign Up"
+              )}
+            </Button>
+          </form>
+        </Form>
 
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="you@example.com"
-                        autoComplete="email"
-                        disabled={isLoading}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <PasswordInput
-                        placeholder="••••••••"
-                        autoComplete="new-password"
-                        disabled={isLoading}
-                        {...field}
-                      >
-                        <PasswordInputStrengthChecker />
-                      </PasswordInput>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <Button
-                type="submit"
-                className="w-full"
-                size="lg"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Spinner className="mr-2" />
-                    Signing Up...
-                  </>
-                ) : (
-                  "Sign Up"
-                )}
-              </Button>
-            </form>
-          </Form>
-
-          <div className="relative my-6">
-            <Separator />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="bg-background px-2 text-xs text-muted-foreground">
-                Or continue with
-              </span>
-            </div>
+        <div className="relative my-6">
+          <Separator />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="bg-card px-2 text-xs text-muted-foreground">
+              Or continue with
+            </span>
           </div>
+        </div>
 
-          <ContinueWithGoogle />
-        </CardContent>
+        <ContinueWithGoogle />
+      </CardContent>
 
-        <CardFooter className="flex flex-col gap-2">
-          <p className="text-sm text-center text-muted-foreground">
-            Already have an account?{" "}
-            <Link href="/signin" className="text-primary hover:underline">
-              Sign in
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
-    </div>
+      <CardFooter className="flex flex-col gap-2">
+        <p className="text-sm text-center text-muted-foreground">
+          Already have an account?{" "}
+          <Link
+            href="/signin"
+            className="font-medium text-primary hover:underline"
+          >
+            Sign in
+          </Link>
+        </p>
+      </CardFooter>
+    </Card>
   );
 }

@@ -44,15 +44,15 @@ function getFileIcon(fileType: FileType) {
 function getFileColor(fileType: FileType): string {
     switch (fileType) {
         case "VIDEO":
-            return "text-purple-500"
+            return "text-[var(--chart-4)] bg-[color-mix(in_oklch,var(--chart-4)_14%,transparent)]"
         case "AUDIO":
-            return "text-blue-500"
+            return "text-[var(--chart-2)] bg-[color-mix(in_oklch,var(--chart-2)_14%,transparent)]"
         case "IMAGE":
-            return "text-green-500"
+            return "text-[var(--chart-3)] bg-[color-mix(in_oklch,var(--chart-3)_14%,transparent)]"
         case "DOCUMENT":
-            return "text-orange-500"
+            return "text-[var(--chart-5)] bg-[color-mix(in_oklch,var(--chart-5)_16%,transparent)]"
         default:
-            return "text-gray-500"
+            return "text-muted-foreground bg-muted"
     }
 }
 
@@ -94,9 +94,9 @@ export function MediaCard({
             }
             aria-pressed={isSelectionMode ? isSelected : undefined}
             className={cn(
-                "group relative rounded-lg border bg-card text-left transition-all hover:shadow-md",
+                "group relative rounded-xl border bg-card text-left transition-all hover:-translate-y-0.5 hover:shadow-md hover:border-ring/40",
                 "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                isSelected && "ring-2 ring-primary"
+                isSelected && "ring-2 ring-primary border-primary"
             )}
             onClick={activate}
             onKeyDown={(e) => {
@@ -128,7 +128,7 @@ export function MediaCard({
             )}
 
             {/* Thumbnail / Icon */}
-            <div className="relative aspect-square overflow-hidden rounded-t-lg bg-muted">
+            <div className="relative aspect-square overflow-hidden rounded-t-xl bg-muted">
                 {showThumbnail ? (
                     /* Plain <img> (not next/image): the proxy is cookie-
                        authenticated, but next/image's optimizer fetches
@@ -142,7 +142,9 @@ export function MediaCard({
                     />
                 ) : (
                     <div className="flex h-full items-center justify-center">
-                        <Icon className={cn("h-12 w-12", iconColor)} />
+                        <span className={cn("flex size-14 items-center justify-center rounded-2xl", iconColor)}>
+                            <Icon className="size-7" />
+                        </span>
                     </div>
                 )}
                 {isVideo && (

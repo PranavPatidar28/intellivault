@@ -1,0 +1,165 @@
+"use client";
+
+import React from "react";
+import { cn } from "@/lib/utils";
+
+interface LogoProps extends React.SVGProps<SVGSVGElement> {
+  iconSize?: number;
+  showText?: boolean;
+  textClass?: string;
+}
+
+export function Logo({
+  iconSize = 32,
+  showText = false,
+  textClass,
+  className,
+  ...props
+}: LogoProps) {
+  return (
+    <div className={cn("flex items-center gap-2.5", className)}>
+      <svg
+        width={iconSize}
+        height={iconSize}
+        viewBox="0 0 100 100"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="shrink-0"
+        {...props}
+      >
+        <defs>
+          {/* Cyan/Teal gradient representing the secure vault */}
+          <linearGradient id="logo-cyan-teal" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#4FD1E0" />
+            <stop offset="100%" stopColor="#1E8A99" />
+          </linearGradient>
+
+          {/* Indigo/Purple gradient representing intelligence/brain glow */}
+          <linearGradient id="logo-indigo-purple" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#6366F1" />
+            <stop offset="100%" stopColor="#A855F7" />
+          </linearGradient>
+
+          {/* Backdrop glow filter for neural nodes */}
+          <filter id="logo-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+        </defs>
+
+        {/* Outer Hexagon Shield (Vault Structure) */}
+        <path
+          d="M50 6 L88 28 V72 L50 94 L12 72 V28 L50 6 Z"
+          stroke="url(#logo-cyan-teal)"
+          strokeWidth="5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          fill="rgba(10, 18, 22, 0.4)"
+        />
+
+        {/* Inner Hexagon dashed ring */}
+        <path
+          d="M50 16 L79 33 V67 L50 84 L21 67 V33 L50 16 Z"
+          stroke="url(#logo-indigo-purple)"
+          strokeWidth="1.5"
+          strokeDasharray="3 3"
+          opacity="0.5"
+        />
+
+        {/* Brain / Neural Network Nodes & Connections */}
+        {/* Left Hemisphere Pathways */}
+        <path
+          d="M30 32 L24 48 L30 64 L42 72"
+          stroke="url(#logo-indigo-purple)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M30 32 L40 40 L50 50"
+          stroke="url(#logo-indigo-purple)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity="0.8"
+        />
+        <path
+          d="M30 64 L40 60 L50 50"
+          stroke="url(#logo-indigo-purple)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity="0.8"
+        />
+
+        {/* Right Hemisphere Pathways */}
+        <path
+          d="M70 32 L76 48 L70 64 L58 72"
+          stroke="url(#logo-indigo-purple)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M70 32 L60 40 L50 50"
+          stroke="url(#logo-indigo-purple)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity="0.8"
+        />
+        <path
+          d="M70 64 L60 60 L50 50"
+          stroke="url(#logo-indigo-purple)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity="0.8"
+        />
+
+        {/* Neural Connectors to Central Safe Dial */}
+        <line x1="24" y1="48" x2="40" y2="50" stroke="url(#logo-cyan-teal)" strokeWidth="2" strokeDasharray="2 2" />
+        <line x1="76" y1="48" x2="60" y2="50" stroke="url(#logo-cyan-teal)" strokeWidth="2" strokeDasharray="2 2" />
+
+        {/* Brain Synapse Nodes */}
+        <circle cx="30" cy="32" r="3.5" fill="#A855F7" />
+        <circle cx="24" cy="48" r="4.5" fill="#6366F1" filter="url(#logo-glow)" />
+        <circle cx="30" cy="64" r="3.5" fill="#A855F7" />
+        <circle cx="42" cy="72" r="4" fill="#6366F1" />
+
+        <circle cx="70" cy="32" r="3.5" fill="#A855F7" />
+        <circle cx="76" cy="48" r="4.5" fill="#6366F1" filter="url(#logo-glow)" />
+        <circle cx="70" cy="64" r="3.5" fill="#A855F7" />
+        <circle cx="58" cy="72" r="4" fill="#6366F1" />
+
+        {/* Central Vault Dial (The Safe Core) */}
+        <circle
+          cx="50"
+          cy="50"
+          r="11"
+          fill="#080e11"
+          stroke="url(#logo-cyan-teal)"
+          strokeWidth="2.5"
+          filter="url(#logo-glow)"
+        />
+        <circle cx="50" cy="50" r="4" fill="url(#logo-cyan-teal)" />
+        <path
+          d="M50 50 L50 43"
+          stroke="url(#logo-cyan-teal)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+        {/* Dial tick marks */}
+        <circle cx="50" cy="41" r="0.75" fill="#4FD1E0" />
+        <circle cx="59" cy="50" r="0.75" fill="#4FD1E0" />
+        <circle cx="50" cy="59" r="0.75" fill="#4FD1E0" />
+        <circle cx="41" cy="50" r="0.75" fill="#4FD1E0" />
+      </svg>
+      {showText && (
+        <span className={cn("font-semibold tracking-tight", textClass)}>
+          IntelliVault
+        </span>
+      )}
+    </div>
+  );
+}

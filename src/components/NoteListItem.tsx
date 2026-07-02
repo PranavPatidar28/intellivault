@@ -5,7 +5,6 @@ import { ClockIcon, Trash2Icon, Sparkles, BookOpen, MoreVertical, Copy, Pin, Tag
 import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
 import { getRelativeTime, truncateText } from "@/lib/utils/text";
-import { Badge } from "./ui/badge";
 import { toast } from "sonner";
 import {
     DropdownMenu,
@@ -134,17 +133,17 @@ function NoteListItem({
                 {/* Tags */}
                 <div className="hidden md:flex items-center gap-1.5 shrink-0 max-w-[200px]">
                     {tags?.slice(0, 2).map((tag) => (
-                        <Badge
+                        <span
                             key={tag.id}
-                            variant="outline"
-                            className="text-[10px] px-1.5 py-0 h-4 font-medium border-transparent bg-secondary/50"
-                            style={tag.color ? {
-                                backgroundColor: `${tag.color}15`,
-                                color: tag.color,
-                            } : undefined}
+                            className="inline-flex items-center gap-1.5 rounded-full border bg-secondary/50 px-2 py-0.5 text-[10px] font-medium text-secondary-foreground"
                         >
+                            <span
+                                className="size-2 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+                                style={{ backgroundColor: tag.color || "var(--muted-foreground)" }}
+                                aria-hidden="true"
+                            />
                             {tag.name}
-                        </Badge>
+                        </span>
                     ))}
                     {tags && tags.length > 2 && (
                         <span className="text-[10px] text-muted-foreground">+{tags.length - 2}</span>
@@ -178,8 +177,9 @@ function NoteListItem({
                 </button>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+            {/* Actions — faintly visible at rest so they're discoverable and
+                reachable on touch; full opacity on hover/focus. */}
+            <div className="flex items-center gap-1 shrink-0 opacity-70 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                         <Button

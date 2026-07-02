@@ -64,19 +64,9 @@ export default function SettingsPage() {
     return (
         <div className="h-full flex flex-col bg-background">
             {/* Header */}
-            <Topbar className="flex-shrink-0">
-                <div className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => router.back()}
-                        aria-label="Go back"
-                    >
-                        <ChevronLeft className="h-4 w-4" />
-                        <span className="sr-only">Go back</span>
-                    </Button>
-                    <h1 className="text-lg font-semibold">Settings</h1>
+            <Topbar>
+                <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+                    <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
                 </div>
             </Topbar>
 

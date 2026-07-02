@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Vault, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/Logo";
 
 const LINKS = [
   { href: "#features", label: "Features" },
@@ -49,16 +50,16 @@ export function Nav() {
         <Link
           href="/"
           className={cn(
-            "group flex items-center gap-2.5 rounded-full",
+            "group rounded-full",
             FOCUS_RING
           )}
         >
-          <span className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-[#4FD1E0] to-[#1E8A99] shadow-[0_0_20px_rgba(79,209,224,0.5)]">
-            <Vault className="size-[18px] text-white" />
-          </span>
-          <span className="text-[15px] font-semibold tracking-tight text-white">
-            IntelliVault
-          </span>
+          <Logo
+            iconSize={28}
+            showText
+            textClass="text-[15px] text-white transition-transform group-hover:scale-[1.02] duration-200"
+            className="transition-transform group-hover:scale-[1.03] duration-200"
+          />
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">

@@ -12,6 +12,10 @@ import { Highlight } from "@tiptap/extension-highlight"
 import { Subscript } from "@tiptap/extension-subscript"
 import { Superscript } from "@tiptap/extension-superscript"
 import { Selection } from "@tiptap/extensions"
+import { Table } from "@tiptap/extension-table"
+import { TableRow } from "@tiptap/extension-table-row"
+import { TableHeader } from "@tiptap/extension-table-header"
+import { TableCell } from "@tiptap/extension-table-cell"
 
 // --- Shiki for VS Code-quality syntax highlighting ---
 import { CodeBlockShiki } from "tiptap-extension-code-block-shiki"
@@ -293,6 +297,12 @@ export const SimpleEditor = forwardRef<SimpleEditorRef, SimpleEditorProps>(funct
       VideoNodeExtension,
       AudioNodeExtension,
       FileAttachmentNodeExtension,
+      Table.configure({
+        resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: props.initialContent,
     onUpdate: ({ editor }) => {
