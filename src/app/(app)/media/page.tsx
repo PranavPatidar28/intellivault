@@ -216,8 +216,10 @@ export default function MediaPage() {
     return (
         <div className="h-full flex flex-col bg-background">
             <Topbar>
-                <h1 className="text-lg font-semibold tracking-tight">Media Library</h1>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+                    <h1 className="text-lg font-semibold tracking-tight">Media Library</h1>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -228,39 +230,42 @@ export default function MediaPage() {
                     <Button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
+                        className="h-9 w-9 sm:w-auto p-0 sm:px-4 justify-center"
+                        title="Upload File"
                     >
                         {isUploading ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
                         ) : (
-                            <Upload className="h-4 w-4 mr-2" />
+                            <Upload className="h-4 w-4 sm:mr-2" />
                         )}
-                        Upload
+                        <span className="hidden sm:inline">Upload</span>
                     </Button>
-                    <Button variant="outline" onClick={refresh} disabled={isLoading}>
-                        <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                        Refresh
+                    <Button
+                        variant="outline"
+                        onClick={refresh}
+                        disabled={isLoading}
+                        className="h-9 w-9 sm:w-auto p-0 sm:px-4 justify-center"
+                        title="Refresh"
+                    >
+                        <RefreshCw className={`h-4 w-4 sm:mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                        <span className="hidden sm:inline">Refresh</span>
                     </Button>
                 </div>
             </Topbar>
 
             <div className="flex-1 overflow-y-auto">
                 <div className="container mx-auto py-6 px-4 space-y-6">
-                    {/* Subtitle & Filters/Actions row */}
+                    {/* Filters/Actions row */}
                     <div className="flex flex-col gap-4">
-                        <div>
-                            <p className="text-sm text-muted-foreground">
-                                Images, video, audio and documents from across your vault.
-                            </p>
-                        </div>
 
-                        <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                             <Select
                                 value={fileType || "all"}
                                 onValueChange={(value) =>
                                     setFileType(value === "all" ? null : (value as FileType))
                                 }
                             >
-                                <SelectTrigger className="w-[180px]">
+                                <SelectTrigger className="w-full sm:w-[180px]">
                                     <SelectValue placeholder="Filter by type" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -272,39 +277,47 @@ export default function MediaPage() {
                                 </SelectContent>
                             </Select>
 
-                            <div className="flex-1" />
+                            <div className="hidden sm:block flex-1" />
 
                             {isSelectionMode ? (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">
+                                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto bg-muted/40 p-2 sm:p-0 rounded-lg">
+                                    <span className="text-xs sm:text-sm text-muted-foreground font-medium shrink-0 pl-1 sm:pl-0">
                                         {selectedUrls.size} selected
                                     </span>
-                                    <Button variant="outline" size="sm" onClick={handleSelectAll}>
-                                        {selectedUrls.size === media.length ? "Deselect all" : "Select all"}
-                                    </Button>
-                                    <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        disabled={selectedUrls.size === 0}
-                                        onClick={() => setIsBulkDeleteOpen(true)}
-                                    >
-                                        <Trash2 className="h-4 w-4 mr-1" />
-                                        Delete selected
-                                    </Button>
-                                    <Button variant="ghost" size="sm" onClick={handleExitSelectionMode}>
-                                        <X className="h-4 w-4" />
-                                    </Button>
+                                    <div className="flex items-center gap-1.5">
+                                        <Button variant="outline" size="sm" onClick={handleSelectAll} className="h-8 px-2 text-xs">
+                                            <span className="hidden sm:inline">{selectedUrls.size === media.length ? "Deselect all" : "Select all"}</span>
+                                            <span className="sm:hidden">{selectedUrls.size === media.length ? "None" : "All"}</span>
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            disabled={selectedUrls.size === 0}
+                                            onClick={() => setIsBulkDeleteOpen(true)}
+                                            className="h-8 w-8 sm:w-auto p-0 sm:px-3 justify-center"
+                                            title="Delete Selected"
+                                        >
+                                            <Trash2 className="h-4 w-4 sm:mr-1" />
+                                            <span className="hidden sm:inline">Delete selected</span>
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={handleExitSelectionMode} className="h-8 w-8 p-0 justify-center">
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
                                 </div>
                             ) : (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setIsSelectionMode(true)}
-                                    disabled={media.length === 0}
-                                >
-                                    <CheckSquare className="h-4 w-4 mr-1" />
-                                    Select
-                                </Button>
+                                <div className="flex justify-end w-full sm:w-auto">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsSelectionMode(true)}
+                                        disabled={media.length === 0}
+                                        className="h-8 w-full sm:w-auto"
+                                    >
+                                        <CheckSquare className="h-4 w-4 mr-1" />
+                                        Select
+                                    </Button>
+                                </div>
                             )}
                         </div>
                     </div>

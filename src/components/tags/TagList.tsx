@@ -185,23 +185,23 @@ export function TagList({
                 {/* Bulk Actions */}
                 {selectedTagIds.length > 0 && (
                     <div className="flex items-center gap-2 p-2 bg-muted rounded">
-                        <span className="text-sm">{selectedTagIds.length} selected</span>
-                        <Button size="sm" variant="outline" onClick={deselectAll}>
+                        <span className="text-xs sm:text-sm font-medium">{selectedTagIds.length} <span className="hidden xs:inline">selected</span><span className="xs:hidden">sel.</span></span>
+                        <Button size="sm" variant="outline" onClick={deselectAll} className="h-8 px-2 text-xs">
                             Clear
                         </Button>
-                        <Button size="sm" variant="outline" onClick={selectAll}>
+                        <Button size="sm" variant="outline" onClick={selectAll} className="h-8 px-2 text-xs">
                             All
                         </Button>
                         <div className="flex-1" />
-                        <Button size="sm" variant="outline" onClick={onMerge}>
-                            <GitMerge size={14} className="mr-1" />
-                            Merge
+                        <Button size="sm" variant="outline" onClick={onMerge} className="h-8 w-8 sm:w-auto p-0 sm:px-3 justify-center" title="Merge Tags">
+                            <GitMerge size={14} className="sm:mr-1" />
+                            <span className="hidden sm:inline">Merge</span>
                         </Button>
                         <Popover open={isColorPopoverOpen} onOpenChange={setIsColorPopoverOpen}>
                             <PopoverTrigger asChild>
-                                <Button size="sm" variant="outline">
-                                    <Palette size={14} className="mr-1" />
-                                    Color
+                                <Button size="sm" variant="outline" className="h-8 w-8 sm:w-auto p-0 sm:px-3 justify-center" title="Recolor Tags">
+                                    <Palette size={14} className="sm:mr-1" />
+                                    <span className="hidden sm:inline">Color</span>
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-56 p-3" align="start">
@@ -226,9 +226,9 @@ export function TagList({
                                 </div>
                             </PopoverContent>
                         </Popover>
-                        <Button size="sm" variant="destructive" onClick={onBulkDelete}>
-                            <Trash2 size={14} className="mr-1" />
-                            Delete
+                        <Button size="sm" variant="destructive" onClick={onBulkDelete} className="h-8 w-8 sm:w-auto p-0 sm:px-3 justify-center" title="Delete Tags">
+                            <Trash2 size={14} className="sm:mr-1" />
+                            <span className="hidden sm:inline">Delete</span>
                         </Button>
                     </div>
                 )}

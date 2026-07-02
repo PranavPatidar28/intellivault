@@ -19,7 +19,14 @@ import {
 import { useTagOperations } from "@/hooks/useTagOperations";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Star, Archive, FileWarning, Download, Upload, BarChart3 } from "lucide-react";
+import { Star, Archive, FileWarning, Download, Upload, BarChart3, Filter, MoreVertical } from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+    DropdownMenuCheckboxItem,
+    DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
@@ -573,73 +580,144 @@ export default function TagsPage() {
     return (
         <div className="h-full flex flex-col">
             <Topbar>
-                <h1 className="text-lg font-semibold tracking-tight shrink-0">Tags</h1>
+                <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+                    <h1 className="text-lg font-semibold tracking-tight shrink-0">Tags</h1>
+                </div>
 
                 {/* Filter toggles + import/export. Wraps on narrow screens and
                     collapses button labels behind sm: so it never overflows. */}
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button
-                        variant={showFavorites ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setShowFavorites(!showFavorites)}
-                        aria-pressed={showFavorites}
-                    >
-                        <Star size={14} className="sm:mr-1" />
-                        <span className="hidden sm:inline">Favorites</span>
-                    </Button>
-                    <Button
-                        variant={showArchived ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setShowArchived(!showArchived)}
-                        aria-pressed={showArchived}
-                    >
-                        <Archive size={14} className="sm:mr-1" />
-                        <span className="hidden sm:inline">Archived</span>
-                    </Button>
-                    <Button
-                        variant={showOrphaned ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setShowOrphaned(!showOrphaned)}
-                        aria-pressed={showOrphaned}
-                    >
-                        <FileWarning size={14} className="sm:mr-1" />
-                        <span className="hidden sm:inline">Orphaned</span>
-                    </Button>
+                <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                    {/* Desktop inline controls */}
+                    <div className="hidden md:flex items-center gap-2">
+                        <Button
+                            variant={showFavorites ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setShowFavorites(!showFavorites)}
+                            aria-pressed={showFavorites}
+                        >
+                            <Star size={14} className="mr-1" />
+                            Favorites
+                        </Button>
+                        <Button
+                            variant={showArchived ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setShowArchived(!showArchived)}
+                            aria-pressed={showArchived}
+                        >
+                            <Archive size={14} className="mr-1" />
+                            Archived
+                        </Button>
+                        <Button
+                            variant={showOrphaned ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setShowOrphaned(!showOrphaned)}
+                            aria-pressed={showOrphaned}
+                        >
+                            <FileWarning size={14} className="mr-1" />
+                            Orphaned
+                        </Button>
 
-                    <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
+                        <div className="h-5 w-px bg-border mx-1" />
 
-                    <Button
-                        variant={showAnalytics ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setShowAnalytics((v) => !v)}
-                        aria-pressed={showAnalytics}
-                        aria-label="Toggle tag analytics"
-                    >
-                        <BarChart3 size={14} className="sm:mr-1" />
-                        <span className="hidden sm:inline">Analytics</span>
-                    </Button>
+                        <Button
+                            variant={showAnalytics ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setShowAnalytics((v) => !v)}
+                            aria-pressed={showAnalytics}
+                        >
+                            <BarChart3 size={14} className="mr-1" />
+                            Analytics
+                        </Button>
 
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleExport("json")}
-                        aria-label="Export tags as JSON"
-                    >
-                        <Download size={14} className="sm:mr-1" />
-                        <span className="hidden sm:inline">Export</span>
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isImporting}
-                        onClick={() => document.getElementById("tag-import-input")?.click()}
-                        aria-label="Import tags from a file"
-                    >
-                        <Upload size={14} className="sm:mr-1" />
-                        <span className="hidden sm:inline">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleExport("json")}
+                        >
+                            <Download size={14} className="mr-1" />
+                            Export
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isImporting}
+                            onClick={() => document.getElementById("tag-import-input")?.click()}
+                        >
+                            <Upload size={14} className="mr-1" />
                             {isImporting ? "Importing..." : "Import"}
-                        </span>
-                    </Button>
+                        </Button>
+                    </div>
+
+                    {/* Mobile grouped controls */}
+                    <div className="flex md:hidden items-center gap-1.5">
+                        <Button
+                            variant={showAnalytics ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setShowAnalytics((v) => !v)}
+                            aria-pressed={showAnalytics}
+                            className="h-9 w-9 p-0 justify-center"
+                            title="Analytics"
+                        >
+                            <BarChart3 size={14} />
+                        </Button>
+
+                        {/* Filters Dropdown */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant={showFavorites || showArchived || showOrphaned ? "default" : "outline"}
+                                    size="sm"
+                                    className="h-9 gap-1.5 px-3"
+                                >
+                                    <Filter size={14} />
+                                    <span className="text-xs">Filters</span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuCheckboxItem
+                                    checked={showFavorites}
+                                    onCheckedChange={setShowFavorites}
+                                >
+                                    Favorites
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem
+                                    checked={showArchived}
+                                    onCheckedChange={setShowArchived}
+                                >
+                                    Archived
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem
+                                    checked={showOrphaned}
+                                    onCheckedChange={setShowOrphaned}
+                                >
+                                    Orphaned
+                                </DropdownMenuCheckboxItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {/* More Actions Dropdown (Import/Export) */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-9 w-9" aria-label="More tag actions">
+                                    <MoreVertical size={14} />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                                <DropdownMenuItem onClick={() => handleExport("json")}>
+                                    <Download size={14} className="mr-2" />
+                                    Export JSON
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    disabled={isImporting}
+                                    onClick={() => document.getElementById("tag-import-input")?.click()}
+                                >
+                                    <Upload size={14} className="mr-2" />
+                                    {isImporting ? "Importing..." : "Import File"}
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+
                     <input
                         id="tag-import-input"
                         type="file"
@@ -654,10 +732,26 @@ export default function TagsPage() {
                 </div>
             </Topbar>
 
-            {showAnalytics && (
-                <div className="border-b bg-muted/30 p-4 overflow-y-auto max-h-[45vh]">
-                    <TagAnalyticsDashboard />
-                </div>
+            {isMobile ? (
+                <Sheet open={showAnalytics} onOpenChange={setShowAnalytics}>
+                    <SheetContent side="bottom" className="h-[80vh] p-0 rounded-t-xl overflow-hidden flex flex-col">
+                        <SheetHeader className="px-4 py-3 border-b flex-shrink-0">
+                            <SheetTitle className="text-sm font-bold flex items-center gap-2">
+                                <BarChart3 className="size-4" />
+                                Tag Analytics
+                            </SheetTitle>
+                        </SheetHeader>
+                        <div className="flex-1 overflow-y-auto p-4 pb-8">
+                            <TagAnalyticsDashboard />
+                        </div>
+                    </SheetContent>
+                </Sheet>
+            ) : (
+                showAnalytics && (
+                    <div className="border-b bg-muted/30 p-4 overflow-y-auto max-h-[45vh]">
+                        <TagAnalyticsDashboard />
+                    </div>
+                )
             )}
 
             <div className="flex-1 flex overflow-hidden">

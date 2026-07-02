@@ -254,13 +254,13 @@ export function QuickCaptureCard({ availableTags, onSuccess }: QuickCaptureCardP
         </div>
 
         {/* Action buttons */}
-        <div className="flex justify-end gap-2 border-t border-border/40 pt-3">
+        <div className="flex flex-col sm:flex-row justify-end gap-2 border-t border-border/40 pt-3">
           <Button
             variant="outline"
             size="sm"
             onClick={handleSaveNote}
             disabled={isDisabled}
-            className="relative h-9 border-border/50"
+            className="relative h-9 border-border/50 w-full sm:w-auto"
           >
             {isSavingNote ? (
               <>
@@ -278,7 +278,7 @@ export function QuickCaptureCard({ availableTags, onSuccess }: QuickCaptureCardP
             size="sm"
             onClick={handleSaveAIDump}
             disabled={isDisabled}
-            className="relative h-9 bg-primary/95 text-primary-foreground hover:bg-primary shadow-xs"
+            className="relative h-9 bg-primary/95 text-primary-foreground hover:bg-primary shadow-xs w-full sm:w-auto"
           >
             {isProcessingAIDump ? (
               <>

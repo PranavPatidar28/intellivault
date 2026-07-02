@@ -50,37 +50,37 @@ export function StatCard({
         ACCENT_BORDER[accent]
       )}
     >
-      <CardContent className="flex flex-col justify-between h-full p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground/90">
-              {label}
-            </p>
-            <p className="mt-1.5 text-3xl font-extrabold tabular-nums tracking-tight sm:text-4xl text-foreground">
-              {value}
-            </p>
-          </div>
+      <CardContent className="p-2.5 sm:p-3.5">
+        <div className="flex items-center gap-2.5">
           <span
             className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors duration-200",
+              "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
               ACCENT_STYLES[accent]
             )}
             aria-hidden="true"
           >
-            <Icon className="size-5 transition-transform duration-300 group-hover:scale-105" />
+            <Icon className="size-4 transition-transform duration-300 group-hover:scale-105" />
           </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[9px] font-bold uppercase tracking-wider text-muted-foreground/90 leading-none">
+              {label}
+            </p>
+            <p className="mt-0.5 text-lg sm:text-xl font-extrabold tabular-nums tracking-tight text-foreground leading-none">
+              {value}
+            </p>
+          </div>
         </div>
 
         {/* Dynamic sub-metric render area */}
         {(progress !== undefined || hint || subtitle) && (
-          <div className="mt-4 space-y-1.5 border-t border-border/20 pt-2.5">
+          <div className="hidden sm:block mt-2 pt-2 border-t border-border/20 space-y-1">
             {progress !== undefined && (
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[9px] text-muted-foreground font-semibold">
                   <span>{subtitle || "Goal Progress"}</span>
                   <span>{Math.round(progress)}%</span>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
                   <div
                     className={cn(
                       "h-full rounded-full transition-[width] duration-1000 ease-out",
@@ -99,12 +99,12 @@ export function StatCard({
             {progress === undefined && (subtitle || hint) && (
               <div className="flex flex-col gap-0.5">
                 {subtitle && (
-                  <p className="truncate text-[10px] font-medium text-foreground/80">
+                  <p className="truncate text-[9px] font-medium text-foreground/80">
                     {subtitle}
                   </p>
                 )}
                 {hint && (
-                  <p className="truncate text-[10px] text-muted-foreground font-medium">
+                  <p className="truncate text-[9px] text-muted-foreground font-medium">
                     {hint}
                   </p>
                 )}

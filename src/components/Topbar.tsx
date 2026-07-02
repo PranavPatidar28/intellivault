@@ -1,12 +1,15 @@
 import React from "react";
 import { cn } from "@/lib/utils";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export const Topbar = ({
   children,
   className,
+  showSidebarTrigger = true,
 }: Readonly<{
   children: React.ReactNode;
   className?: string;
+  showSidebarTrigger?: boolean;
 }>) => {
   return (
     <header
@@ -16,6 +19,9 @@ export const Topbar = ({
       )}
     >
       <div className="flex h-14 w-full items-center justify-between gap-4 px-4 md:px-6">
+        {showSidebarTrigger && (
+          <SidebarTrigger className="md:hidden shrink-0 -ml-1 mr-1" />
+        )}
         {children}
       </div>
     </header>

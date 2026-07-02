@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Vault } from "lucide-react";
+import { Logo } from "@/components/Logo";
 
 /**
  * Branded shell for the auth pages (sign in / sign up). Provides a full-screen
@@ -21,14 +21,14 @@ export default function AuthLayout({
 
       <Link
         href="/"
-        className="group mb-8 flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
+        className="group mb-8 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
       >
-        <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md transition-transform group-hover:scale-105">
-          <Vault className="size-5" />
-        </span>
-        <span className="text-xl font-semibold tracking-tight">
-          IntelliVault
-        </span>
+        <Logo
+          iconSize={36}
+          showText
+          textClass="text-xl"
+          className="transition-transform group-hover:scale-105 duration-200"
+        />
       </Link>
 
       {children}
