@@ -1,7 +1,8 @@
 "use client";
 
-import { Home, Inbox, Settings, FolderOpen, Sparkles, Tag, Vault } from "lucide-react";
+import { Home, Inbox, Settings, FolderOpen, Sparkles, Tag } from "lucide-react";
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 import { usePathname } from "next/navigation";
 
 import {
@@ -71,14 +72,19 @@ export function AppSidebar({ session }: AppSidebarProps) {
         {sidebarContext.open ? (
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 px-3 py-2 group/brand"
+            className="px-3 py-2 group/brand"
+            onClick={() => {
+              if (sidebarContext.isMobile) {
+                sidebarContext.setOpenMobile(false);
+              }
+            }}
           >
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm transition-transform group-hover/brand:scale-105">
-              <Vault className="size-4" />
-            </span>
-            <span className="text-lg font-semibold tracking-tight">
-              IntelliVault
-            </span>
+            <Logo
+              iconSize={26}
+              showText
+              textClass="text-lg"
+              className="transition-transform group-hover/brand:scale-105 duration-200"
+            />
           </Link>
         ) : null}
         <SidebarTrigger className="m-2.5" />
@@ -104,7 +110,14 @@ export function AppSidebar({ session }: AppSidebarProps) {
                       isActive={isActive}
                       tooltip={item.title}
                     >
-                      <Link href={item.url}>
+                      <Link
+                        href={item.url}
+                        onClick={() => {
+                          if (sidebarContext.isMobile) {
+                            sidebarContext.setOpenMobile(false);
+                          }
+                        }}
+                      >
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>
